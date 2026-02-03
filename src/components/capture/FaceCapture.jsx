@@ -15,7 +15,7 @@ import {
   Calendar,
 } from "lucide-react";
 import * as faceapi from "face-api.js";
-import { useKiosk } from "../contexts/KisokContext";
+import { useKiosk } from "../../contexts/KisokContext";
 
 function FaceVerificationSystem() {
   const { verifyAppointmentArrival } = useKiosk();
