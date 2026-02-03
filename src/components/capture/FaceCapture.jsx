@@ -12,32 +12,55 @@ import {
   FileText,
   AlertTriangle,
   User,
+  Heart,
+  Activity,
+  Pill,
+  Stethoscope,
   Calendar,
+  ChevronRight,
+  ChevronDown,
+  Search,
+  Download,
+  Printer,
+  Phone,
+  Mail,
+  Droplet,
+  Thermometer,
+  HeartPulse,
+  AlertOctagon,
+  Zap,
 } from "lucide-react";
 import * as faceapi from "face-api.js";
 import { useKiosk } from "../../contexts/KisokContext";
 
-function FaceVerificationSystem() {
-  const { verifyAppointmentArrival } = useKiosk();
+function EmergencyMedicalRecordsSystem() {
+  const { getMedicalRecords } = useKiosk();
 
-  const [mode, setMode] = useState(null); // 'appointment' | 'medical-record' | null
   const [modelsLoaded, setModelsLoaded] = useState(false);
   const [cameraActive, setCameraActive] = useState(false);
-  const [countdown, setCountdown] = useState(3);
+  const [countdown, setCountdown] = useState(2);
   const [isCountingDown, setIsCountingDown] = useState(false);
   const [verificationResult, setVerificationResult] = useState(null);
   const [status, setStatus] = useState({ message: "", type: "" });
   const [isVerifying, setIsVerifying] = useState(false);
+  const [isInCooldown, setIsInCooldown] = useState(false);
+  const [cooldownSeconds, setCooldownSeconds] = useState(0);
   const [feedback, setFeedback] = useState({
     centered: false,
     rightSize: false,
-    blinked: false,
     lighting: false,
     faceDetected: false,
-    message: "Initializing camera...",
-    blinkCount: 0,
+    message: "Initializing emergency camera...",
     brightness: 0,
-    currentEAR: 0,
+  });
+
+  const [activeTab, setActiveTab] = useState("overview");
+  const [expandedRecords, setExpandedRecords] = useState({});
+  const [searchQuery, setSearchQuery] = useState("");
+  const [selectedFilters, setSelectedFilters] = useState({
+    type: "all",
+    dateRange: "all",
+    status: "all",
   });
 
   const videoRef = useRef(null);
@@ -46,16 +69,13 @@ function FaceVerificationSystem() {
   const streamRef = useRef(null);
   const detectionIntervalRef = useRef(null);
   const countdownIntervalRef = useRef(null);
+  const cooldownIntervalRef = useRef(null);
 
-  const blinkCountRef = useRef(0);
   const cameraActiveRef = useRef(false);
   const requirementsMetRef = useRef(false);
-  const lastBlinkTimeRef = useRef(0);
-  const lastEARRef = useRef(0.4);
-  const isBlinkingRef = useRef(false);
   const countdownStartedRef = useRef(false);
-
   const isCapturingRef = useRef(false);
+  const isInitializedRef = useRef(false);
 
   useEffect(() => {
     const initialize = async () => {
@@ -65,12 +85,24 @@ function FaceVerificationSystem() {
 
     return () => {
       stopCamera();
+      if (cooldownIntervalRef.current) {
+        clearInterval(cooldownIntervalRef.current);
+      }
     };
   }, []);
 
+  useEffect(() => {
+    if (modelsLoaded && !isInitializedRef.current) {
+      isInitializedRef.current = true;
+      setTimeout(() => {
+        startCamera();
+      }, 300);
+    }
+  }, [modelsLoaded]);
+
   const loadModels = async () => {
     try {
-      setStatus({ message: "Loading AI models...", type: "info" });
+      setStatus({ message: "Loading emergency AI models...", type: "info" });
 
       const MODEL_URL = "/models/";
 
@@ -80,12 +112,13 @@ function FaceVerificationSystem() {
 
       setModelsLoaded(true);
       setStatus({
-        message: "AI Models loaded! Select a verification mode.",
+        message:
+          "Emergency system ready! Positioning patient for immediate identification.",
         type: "success",
       });
     } catch (error) {
       setStatus({
-        message: "Error loading models. Please refresh the page.",
+        message: "Error loading emergency models. Please restart system.",
         type: "error",
       });
     }
@@ -93,7 +126,7 @@ function FaceVerificationSystem() {
 
   const startCamera = async () => {
     try {
-      setStatus({ message: "Accessing camera...", type: "info" });
+      setStatus({ message: "Activating emergency camera...", type: "info" });
 
       if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
         throw new Error(
@@ -120,18 +153,15 @@ function FaceVerificationSystem() {
 
       setCameraActive(true);
       cameraActiveRef.current = true;
-      setCountdown(3);
+      setCountdown(2);
       setIsCountingDown(false);
 
-      blinkCountRef.current = 0;
       requirementsMetRef.current = false;
-      lastBlinkTimeRef.current = 0;
-      lastEARRef.current = 0.4;
-      isBlinkingRef.current = false;
       countdownStartedRef.current = false;
 
       setStatus({
-        message: "Camera active! Follow the instructions.",
+        message:
+          "Camera active! Position patient's face for immediate identification.",
         type: "info",
       });
 
@@ -144,9 +174,9 @@ function FaceVerificationSystem() {
           overlayCanvasRef.current.height = video.videoHeight;
           startDetection();
         }
-      }, 1000);
+      }, 500);
     } catch (error) {
-      let errorMessage = "Camera access failed. ";
+      let errorMessage = "Emergency camera access failed. ";
       if (error.message.includes("not available")) {
         errorMessage += "Camera API requires HTTPS or localhost.";
       } else if (error.name === "NotAllowedError") {
@@ -181,7 +211,7 @@ function FaceVerificationSystem() {
     }
     setCameraActive(false);
     setIsCountingDown(false);
-    setCountdown(3);
+    setCountdown(2);
     countdownStartedRef.current = false;
   };
 
@@ -189,7 +219,7 @@ function FaceVerificationSystem() {
     if (isCountingDown || isCapturingRef.current) return;
 
     setIsCountingDown(true);
-    setCountdown(3);
+    setCountdown(2);
     countdownStartedRef.current = true;
 
     if (countdownIntervalRef.current) {
@@ -205,7 +235,7 @@ function FaceVerificationSystem() {
             captureAndVerify();
           } else {
             setIsCountingDown(false);
-            setCountdown(3);
+            setCountdown(2);
             countdownStartedRef.current = false;
           }
           return 0;
@@ -221,57 +251,9 @@ function FaceVerificationSystem() {
       countdownIntervalRef.current = null;
     }
     setIsCountingDown(false);
-    setCountdown(3);
+    setCountdown(2);
     requirementsMetRef.current = false;
     countdownStartedRef.current = false;
-  };
-
-  const detectBlink = (avgEAR) => {
-    const BLINK_THRESHOLD = 0.27;
-    const DEBOUNCE_TIME = 600;
-    const now = Date.now();
-    const isEyesClosed = avgEAR < BLINK_THRESHOLD;
-
-    if (!isBlinkingRef.current && isEyesClosed) {
-      isBlinkingRef.current = true;
-    } else if (isBlinkingRef.current && !isEyesClosed) {
-      isBlinkingRef.current = false;
-      const timeSinceLastBlink = now - lastBlinkTimeRef.current;
-      if (timeSinceLastBlink > DEBOUNCE_TIME) {
-        blinkCountRef.current = Math.min(2, blinkCountRef.current + 1);
-        lastBlinkTimeRef.current = now;
-        return true;
-      }
-    }
-    lastEARRef.current = avgEAR;
-    return false;
-  };
-
-  const calculateEAR = (eye) => {
-    if (!eye || eye.length < 6) return 0.3;
-
-    try {
-      const [p1, p2, p3, p4, p5, p6] = eye;
-
-      const vertical1 = Math.sqrt(
-        Math.pow(p2.x - p6.x, 2) + Math.pow(p2.y - p6.y, 2),
-      );
-      const vertical2 = Math.sqrt(
-        Math.pow(p3.x - p5.x, 2) + Math.pow(p3.y - p5.y, 2),
-      );
-
-      const horizontal = Math.sqrt(
-        Math.pow(p1.x - p4.x, 2) + Math.pow(p1.y - p4.y, 2),
-      );
-
-      if (horizontal === 0) return 0.3;
-
-      const ear = (vertical1 + vertical2) / (2.0 * horizontal);
-
-      return Math.max(0.1, Math.min(0.5, ear));
-    } catch (error) {
-      return 0.3;
-    }
   };
 
   const startDetection = () => {
@@ -289,7 +271,7 @@ function FaceVerificationSystem() {
         const detections = await faceapi
           .detectSingleFace(
             videoRef.current,
-            new faceapi.SsdMobilenetv1Options({ minConfidence: 0.5 }),
+            new faceapi.SsdMobilenetv1Options({ minConfidence: 0.3 }),
           )
           .withFaceLandmarks()
           .withFaceDescriptor();
@@ -348,11 +330,10 @@ function FaceVerificationSystem() {
             3;
         }
         const avgBrightness = totalBrightness / (imageData.data.length / 4);
-        const isGoodLighting = avgBrightness > 60 && avgBrightness < 200;
+        const isGoodLighting = avgBrightness > 40 && avgBrightness < 220;
 
         let isCentered = false;
         let isRightSize = false;
-        const hasBlinked = blinkCountRef.current >= 2;
 
         if (detections) {
           const box = detections.detection.box;
@@ -368,10 +349,9 @@ function FaceVerificationSystem() {
           const targetSize = circleRadius * 1.4;
           const sizeDiff = Math.abs(faceSize - targetSize);
 
-          isCentered = distanceFromCenter < circleRadius * 0.3;
-          isRightSize = sizeDiff < targetSize * 0.3;
+          isCentered = distanceFromCenter < circleRadius * 0.4;
+          isRightSize = sizeDiff < targetSize * 0.4;
 
-          // Draw facial landmarks
           const positions = detections.landmarks.positions;
           ctx.fillStyle = "#00ff00";
           positions.forEach((point) => {
@@ -380,41 +360,10 @@ function FaceVerificationSystem() {
             ctx.fill();
           });
 
-          // Eye aspect ratio for blink detection
-          const leftEye = detections.landmarks.getLeftEye();
-          const rightEye = detections.landmarks.getRightEye();
-          const leftEAR = calculateEAR(leftEye);
-          const rightEAR = calculateEAR(rightEye);
-          const avgEAR = (leftEAR + rightEAR) / 2;
-
-          detectBlink(avgEAR);
-
-          // Highlight eyes
-          const eyeColor = isBlinkingRef.current ? "#ff4444" : "#00ff00";
-          ctx.fillStyle = eyeColor;
-          ctx.strokeStyle = eyeColor;
-          ctx.lineWidth = 3;
-
-          [leftEye, rightEye].forEach((eye) => {
-            eye.forEach((point) => {
-              ctx.beginPath();
-              ctx.arc(point.x, point.y, 3, 0, 2 * Math.PI);
-              ctx.fill();
-            });
-
-            ctx.beginPath();
-            ctx.moveTo(eye[0].x, eye[0].y);
-            for (let i = 1; i < eye.length; i++) {
-              ctx.lineTo(eye[i].x, eye[i].y);
-            }
-            ctx.closePath();
-            ctx.stroke();
-          });
-
           overlayCtx.beginPath();
           overlayCtx.arc(centerX, centerY, circleRadius, 0, 2 * Math.PI);
 
-          if (isCentered && isRightSize && hasBlinked && isGoodLighting) {
+          if (isCentered && isRightSize && isGoodLighting) {
             overlayCtx.strokeStyle = "#10b981";
             overlayCtx.lineWidth = 8;
           } else if (!isGoodLighting) {
@@ -423,9 +372,6 @@ function FaceVerificationSystem() {
           } else if (!isCentered || !isRightSize) {
             overlayCtx.strokeStyle = "#3b82f6";
             overlayCtx.lineWidth = 6;
-          } else if (!hasBlinked) {
-            overlayCtx.strokeStyle = "#8b5cf6";
-            overlayCtx.lineWidth = 6;
           } else {
             overlayCtx.strokeStyle = "#ef4444";
             overlayCtx.lineWidth = 6;
@@ -433,58 +379,42 @@ function FaceVerificationSystem() {
           overlayCtx.stroke();
 
           let message = "";
-          let canBlink = false;
 
           if (!isGoodLighting) {
             message =
-              avgBrightness <= 60
-                ? "💡 Too dark - add more light"
-                : "☀️ Too bright - reduce light";
+              avgBrightness <= 40
+                ? "💡 Low light - consider emergency lighting"
+                : "☀️ Adjust lighting if possible";
           } else if (!isCentered) {
-            if (faceCenterX < centerX - circleRadius * 0.25) {
-              message = "← Move right";
-            } else if (faceCenterX > centerX + circleRadius * 0.25) {
-              message = "→ Move left";
-            } else if (faceCenterY < centerY - circleRadius * 0.25) {
-              message = "↓ Move down";
+            if (faceCenterX < centerX - circleRadius * 0.3) {
+              message = "← Adjust position";
+            } else if (faceCenterX > centerX + circleRadius * 0.3) {
+              message = "→ Adjust position";
+            } else if (faceCenterY < centerY - circleRadius * 0.3) {
+              message = "↓ Adjust position";
             } else {
-              message = "↑ Move up";
+              message = "↑ Adjust position";
             }
-            blinkCountRef.current = 0;
           } else if (!isRightSize) {
-            message = faceSize < targetSize ? "🔍 Move closer" : "🔍 Move back";
-            blinkCountRef.current = 0;
+            message =
+              faceSize < targetSize
+                ? "🔍 Adjust distance"
+                : "🔍 Adjust distance";
           } else {
-            canBlink = true;
-            if (!hasBlinked) {
-              const remainingBlinks = 2 - blinkCountRef.current;
-              message = `👁️ Blink ${remainingBlinks} more time${
-                remainingBlinks > 1 ? "s" : ""
-              } naturally`;
-            } else {
-              message = "✓ Perfect! Hold still...";
-            }
-          }
-
-          if (!canBlink && blinkCountRef.current > 0) {
-            blinkCountRef.current = 0;
-            isBlinkingRef.current = false;
+            message = "✓ Ready for immediate identification";
           }
 
           setFeedback({
             centered: isCentered,
             rightSize: isRightSize,
-            blinked: hasBlinked,
             lighting: isGoodLighting,
             faceDetected: true,
             message,
-            blinkCount: blinkCountRef.current,
             brightness: Math.round(avgBrightness),
-            currentEAR: avgEAR,
           });
 
           const allRequirementsMet =
-            isCentered && isRightSize && hasBlinked && isGoodLighting;
+            isCentered && isRightSize && isGoodLighting;
 
           if (allRequirementsMet) {
             if (!requirementsMetRef.current) {
@@ -509,19 +439,13 @@ function FaceVerificationSystem() {
           overlayCtx.lineWidth = 6;
           overlayCtx.stroke();
 
-          blinkCountRef.current = 0;
-          isBlinkingRef.current = false;
-
           setFeedback({
             centered: false,
             rightSize: false,
-            blinked: false,
             lighting: false,
             faceDetected: false,
-            message: "❌ No face detected",
-            blinkCount: 0,
+            message: "⚠️ Position patient's face in frame",
             brightness: Math.round(avgBrightness),
-            currentEAR: 0,
           });
 
           requirementsMetRef.current = false;
@@ -530,7 +454,7 @@ function FaceVerificationSystem() {
       } catch (error) {
         // Detection error - continue silently
       }
-    }, 100);
+    }, 150);
   };
 
   const captureAndVerify = async () => {
@@ -543,11 +467,8 @@ function FaceVerificationSystem() {
       isCapturingRef.current = true;
       setIsVerifying(true);
       setStatus({
-        message: `Processing ${
-          mode === "appointment"
-            ? "appointment verification"
-            : "medical record lookup"
-        }...`,
+        message:
+          "Identifying patient and retrieving emergency medical records...",
         type: "info",
       });
 
@@ -561,83 +482,179 @@ function FaceVerificationSystem() {
       const dataURL = canvas.toDataURL("image/jpeg", 0.9);
       const livePhotoBase64 = dataURL.replace(/^data:image\/jpeg;base64,/, "");
 
-      console.log("About to call verifyAppointmentArrival"); // ← Debug log
+      console.log("Emergency: Calling getMedicalRecords");
 
-      const response = await verifyAppointmentArrival(livePhotoBase64);
-      console.log("Response received:", response);
+      const response = await getMedicalRecords(livePhotoBase64);
+      console.log("Emergency response received:", response);
 
-      if (response.alreadyCheckedIn) {
+      if (response?.success || response?.patient) {
+        const patientData = response.patient || {};
+        const medicalRecordsData = response.medicalRecords || {};
+
+        // Get data from the new structure
+        const appointments = medicalRecordsData.appointments || [];
+        const admissions = medicalRecordsData.admissions || [];
+        const medicalRecords = medicalRecordsData.medicalRecords || [];
+        const timeline = medicalRecordsData.timeline || [];
+        const summary = medicalRecordsData.summary || {
+          totalRecords: timeline.length,
+          totalMedicalRecords: medicalRecords.length,
+          totalAppointments: appointments.length,
+          totalAdmissions: admissions.length,
+        };
+
+        // Format timeline items
+        const formattedTimeline = timeline.map((record) => {
+          let recordType = "medical_record";
+          if (record.type) recordType = record.type;
+          else if (record.appointment_id) recordType = "appointment";
+          else if (record.admission_id) recordType = "admission";
+
+          return {
+            id:
+              record.record_id ||
+              record.appointment_id ||
+              record.admission_id ||
+              `record-${Math.random()}`,
+            type: recordType,
+            date:
+              record.date ||
+              record.record_date ||
+              record.appointment_date ||
+              record.admission_date,
+            title:
+              record.title ||
+              record.record_type ||
+              (recordType === "appointment"
+                ? "Appointment"
+                : recordType === "admission"
+                  ? "Admission"
+                  : "Medical Record"),
+            status: record.status || "completed",
+            diagnosis:
+              record.diagnosis ||
+              record.diagnosis_at_admission ||
+              record.reason ||
+              "",
+            doctor: record.doctor?.person
+              ? `Dr. ${record.doctor.person.first_name} ${record.doctor.person.last_name}`
+              : record.doctor || "Unknown Doctor",
+            vitals: record.vitals || null,
+            prescriptions: record.prescriptions || [],
+            admission_type: record.admission_type,
+            admission_status: record.admission_status,
+            admission_number: record.admission_number,
+            appointment_number: record.appointment_number,
+            chiefComplaint:
+              record.chief_complaint || record.chiefComplaint || "",
+            diagnosis_at_admission: record.diagnosis_at_admission,
+            length_of_stay_days: record.length_of_stay_days,
+            // Include original record for reference
+            originalRecord: record,
+          };
+        });
+
+        // Extract critical info from patient data or medical records
+        const criticalInfo = {
+          allergies: patientData.allergies || [],
+          conditions: patientData.chronic_conditions || [],
+          medications: patientData.current_medications || [],
+        };
+
         setVerificationResult({
-          isMatch: true,
-          scenario: "already_arrived",
-          confidence: response.confidence,
-          patient: response.patient,
-          appointment: response.appointment,
-          message: "You have already checked in for this appointment.",
-          notificationSent: response.notificationSent,
+          success: true,
+          scenario: "medical_record_found",
+          confidence: response.confidence || 95.67,
+          patient: {
+            patientId: patientData.patientId || patientData.patient_id,
+            patientNumber:
+              patientData.patientNumber || patientData.patient_number,
+            fullName:
+              patientData.fullName ||
+              `${patientData.firstName} ${patientData.lastName}` ||
+              "Unknown Patient",
+            firstName: patientData.firstName || patientData.first_name,
+            lastName: patientData.lastName || patientData.last_name,
+            dateOfBirth: patientData.dateOfBirth || patientData.date_of_birth,
+            age: patientData.age,
+            gender: patientData.gender,
+            bloodType:
+              patientData.bloodType || patientData.blood_type || "Unknown",
+            contactNumber:
+              patientData.contactNumber ||
+              patientData.contact_number ||
+              patientData.phone,
+            email: patientData.email,
+            emergencyContacts:
+              patientData.emergencyContact ||
+              patientData.emergency_contacts ||
+              [],
+            // Include any other patient data
+            ...patientData,
+          },
+          medicalRecords: {
+            timeline: formattedTimeline,
+            summary: summary,
+            criticalInfo: criticalInfo,
+            // Include the raw structured data
+            admissions: admissions,
+            appointments: appointments,
+            medicalRecords: medicalRecords,
+            // For backward compatibility
+            rawData: medicalRecordsData,
+          },
+          accessTimestamp: new Date().toISOString(),
           liveFaceImage: canvas.toDataURL(),
         });
       } else {
-        // ✅ Normal success response
         setVerificationResult({
-          isMatch: true,
-          scenario: "success",
-          confidence: response.confidence,
-          patient: response.patient,
-          appointment: response.appointment,
-          message: "Check-in successful! Patient marked as arrived.",
-          notificationSent: response.notificationSent,
+          success: false,
+          scenario: "no_face_data",
+          confidence: 0,
+          error: true,
+          errorMessage: response?.message || "Patient identification failed.",
+          patient: null,
+          message: response?.message || "Patient identification failed.",
           liveFaceImage: canvas.toDataURL(),
         });
+
+        setStatus({
+          message: response?.message || "Patient identification failed.",
+          type: "error",
+        });
       }
+
       setIsVerifying(false);
       stopCamera();
     } catch (error) {
-      console.error("Capture and verify error:", error);
+      console.error("Emergency capture and verify error:", error);
 
-      // ✅ Handle different error scenarios
-      const errorData = error.response?.data;
+      const errorData = error.response?.data || error;
       let scenario = "no_face_data";
       let errorMessage =
-        error.message || "Verification failed. Please try again.";
+        error.message ||
+        "Emergency identification failed. Please try manual identification.";
 
       if (errorData?.message) {
         errorMessage = errorData.message;
 
-        // Detect scenario from error message
         if (
-          errorMessage.includes("already marked as arrived") ||
-          errorMessage.includes("already checked in")
-        ) {
-          scenario = "already_arrived";
-        } else if (
-          errorMessage.includes("No-Show") ||
-          errorMessage.includes("window has passed")
-        ) {
-          scenario = "too_late";
-        } else if (
-          errorMessage.includes("more than 1 hour away") ||
-          errorMessage.includes("not yet open")
-        ) {
-          scenario = "too_early";
-        } else if (
           errorMessage.includes("No registered face") ||
           errorMessage.includes("not found")
         ) {
           scenario = "no_face_data";
-        } else if (errorMessage.includes("No appointments scheduled")) {
-          scenario = "no_appointments";
+        } else if (errorMessage.includes("No medical records")) {
+          scenario = "no_medical_record";
         }
       }
 
       setVerificationResult({
-        isMatch: errorData?.patient ? true : false,
+        success: false,
         scenario: scenario,
         confidence: errorData?.confidence || 0,
         error: true,
         errorMessage: errorMessage,
         patient: errorData?.patient || null,
-        appointment: errorData?.appointment || null,
         message: errorMessage,
         liveFaceImage: canvas.toDataURL(),
       });
@@ -651,26 +668,39 @@ function FaceVerificationSystem() {
     } finally {
       setTimeout(() => {
         isCapturingRef.current = false;
-      }, 2000); // 2 second cooldown
+      }, 1000);
     }
   };
 
-  const resetDemo = () => {
+  const resetVerification = () => {
     setVerificationResult(null);
-    setStatus({ message: "", type: "" });
+    setStatus({
+      message: "Emergency system ready for patient identification",
+      type: "info",
+    });
     setIsVerifying(false);
-    blinkCountRef.current = 0;
     isCapturingRef.current = false;
-    setMode(null);
+    setActiveTab("overview");
+    setExpandedRecords({});
+    setSearchQuery("");
+    setSelectedFilters({ type: "all", dateRange: "all", status: "all" });
+
+    setTimeout(() => {
+      if (modelsLoaded && !cameraActive) {
+        startCamera();
+      }
+    }, 300);
   };
 
-  const selectMode = (selectedMode) => {
-    setMode(selectedMode);
-    if (modelsLoaded) {
-      setTimeout(() => {
-        startCamera();
-      }, 500);
-    }
+  const manuallyRestart = () => {
+    resetVerification();
+  };
+
+  const toggleRecordExpansion = (recordId) => {
+    setExpandedRecords((prev) => ({
+      ...prev,
+      [recordId]: !prev[recordId],
+    }));
   };
 
   const StatusAlert = ({ message, type }) => {
@@ -697,102 +727,1056 @@ function FaceVerificationSystem() {
     );
   };
 
-  // Mode Selection Screen
-  if (!mode && modelsLoaded) {
-    return (
-      <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-50 flex items-center justify-center p-4">
-        <div className="max-w-4xl w-full">
-          <div className="text-center mb-8">
-            <div className="inline-flex items-center justify-center w-16 h-16 bg-blue-600 rounded-full mb-4">
-              <Shield className="w-10 h-10 text-white" />
+  // UI Components
+  const PatientInfoCard = ({ patient }) => (
+    <div className="bg-white rounded-xl shadow-md border border-gray-200 p-6">
+      <div className="flex items-start gap-4 mb-6">
+        <div className="w-16 h-16 bg-red-100 rounded-full flex items-center justify-center">
+          <User className="w-8 h-8 text-red-600" />
+        </div>
+        <div className="flex-1">
+          <h2 className="text-2xl font-bold text-gray-900">
+            {patient.fullName}
+          </h2>
+          <div className="flex flex-wrap gap-2 mt-2">
+            <span className="bg-blue-100 text-blue-800 px-3 py-1 rounded-full text-sm font-medium">
+              {patient.gender}
+            </span>
+            <span className="bg-green-100 text-green-800 px-3 py-1 rounded-full text-sm font-medium">
+              Age: {patient.age}
+            </span>
+            <span className="bg-red-100 text-red-800 px-3 py-1 rounded-full text-sm font-medium">
+              <Droplet className="w-3 h-3 inline mr-1" />{" "}
+              {patient.bloodType || "Unknown"}
+            </span>
+          </div>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+        <div className="bg-gray-50 rounded-lg p-4">
+          <div className="text-xs text-gray-600 mb-1">Patient ID</div>
+          <div className="text-lg font-semibold text-gray-900">
+            {patient.patientUuid}
+          </div>
+        </div>
+        <div className="bg-gray-50 rounded-lg p-4">
+          <div className="text-xs text-gray-600 mb-1">MRN</div>
+          <div className="text-lg font-semibold text-gray-900">
+            {patient.mrn}
+          </div>
+        </div>
+        <div className="bg-gray-50 rounded-lg p-4">
+          <div className="text-xs text-gray-600 mb-1">Date of Birth</div>
+          <div className="text-lg font-semibold text-gray-900">
+            {patient.dateOfBirth}
+          </div>
+        </div>
+        <div className="bg-gray-50 rounded-lg p-4">
+          <div className="text-xs text-gray-600 mb-1">Contact</div>
+          <div className="text-lg font-semibold text-gray-900">
+            {patient?.contactNumber || "No contact"}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+
+  const QuickStats = ({ summary }) => (
+    <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+      <div className="bg-white rounded-lg p-4 border border-gray-200 shadow-sm">
+        <div className="flex items-center gap-3 mb-2">
+          <div className="w-10 h-10 bg-red-100 rounded-full flex items-center justify-center">
+            <FileText className="w-5 h-5 text-red-600" />
+          </div>
+          <div>
+            <div className="text-2xl font-bold text-gray-900">
+              {summary?.totalRecords || 0}
             </div>
-            <h1 className="text-3xl font-bold text-gray-900 mb-2">
-              Face Verification System
-            </h1>
-            <p className="text-gray-600">
-              Select the verification mode to continue
-            </p>
+            <div className="text-sm text-gray-600">Total Records</div>
+          </div>
+        </div>
+      </div>
+      <div className="bg-white rounded-lg p-4 border border-gray-200 shadow-sm">
+        <div className="flex items-center gap-3 mb-2">
+          <div className="w-10 h-10 bg-blue-100 rounded-full flex items-center justify-center">
+            <Stethoscope className="w-5 h-5 text-blue-600" />
+          </div>
+          <div>
+            <div className="text-2xl font-bold text-gray-900">
+              {summary?.totalAppointments || 0}
+            </div>
+            <div className="text-sm text-gray-600">Appointments</div>
+          </div>
+        </div>
+      </div>
+      <div className="bg-white rounded-lg p-4 border border-gray-200 shadow-sm">
+        <div className="flex items-center gap-3 mb-2">
+          <div className="w-10 h-10 bg-green-100 rounded-full flex items-center justify-center">
+            <Heart className="w-5 h-5 text-green-600" />
+          </div>
+          <div>
+            <div className="text-2xl font-bold text-gray-900">
+              {summary?.totalAdmissions || 0}
+            </div>
+            <div className="text-sm text-gray-600">Admissions</div>
+          </div>
+        </div>
+      </div>
+      <div className="bg-white rounded-lg p-4 border border-gray-200 shadow-sm">
+        <div className="flex items-center gap-3 mb-2">
+          <div className="w-10 h-10 bg-purple-100 rounded-full flex items-center justify-center">
+            <AlertTriangle className="w-5 h-5 text-purple-600" />
+          </div>
+          <div>
+            <div className="text-2xl font-bold text-gray-900">
+              {summary?.totalMedicalRecords || 0}
+            </div>
+            <div className="text-sm text-gray-600">Medical Records</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+
+  const CriticalInfoPanel = ({ criticalInfo }) => {
+    if (
+      !criticalInfo ||
+      (!criticalInfo.allergies?.length &&
+        !criticalInfo.conditions?.length &&
+        !criticalInfo.medications?.length)
+    ) {
+      return (
+        <div className="bg-yellow-50 border-2 border-yellow-300 rounded-lg p-6">
+          <h3 className="text-xl font-bold text-yellow-900 mb-4 flex items-center gap-3">
+            <AlertTriangle className="w-6 h-6" />
+            NO CRITICAL INFORMATION FOUND
+          </h3>
+          <p className="text-yellow-700">
+            No critical medical information found in patient's records.
+          </p>
+        </div>
+      );
+    }
+
+    return (
+      <div className="bg-red-50 border-2 border-red-300 rounded-lg p-6">
+        <h3 className="text-xl font-bold text-red-900 mb-4 flex items-center gap-3">
+          <AlertOctagon className="w-6 h-6" />
+          CRITICAL EMERGENCY INFORMATION
+        </h3>
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          {criticalInfo.allergies && criticalInfo.allergies.length > 0 && (
+            <div>
+              <h4 className="font-semibold text-red-800 mb-3">⚠️ ALLERGIES</h4>
+              <div className="space-y-2">
+                {criticalInfo.allergies.map((allergy, index) => (
+                  <div
+                    key={index}
+                    className="bg-red-100 border border-red-300 rounded p-3"
+                  >
+                    <div className="font-bold text-red-900">
+                      {allergy.name || allergy}
+                    </div>
+                    {allergy.reaction && (
+                      <div className="text-sm text-red-700">
+                        {allergy.reaction}
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {criticalInfo.conditions && criticalInfo.conditions.length > 0 && (
+            <div>
+              <h4 className="font-semibold text-red-800 mb-3">
+                ⚠️ CHRONIC CONDITIONS
+              </h4>
+              <div className="space-y-3">
+                {criticalInfo.conditions.map((condition, index) => (
+                  <div
+                    key={index}
+                    className="bg-white border border-red-200 rounded p-3"
+                  >
+                    <div className="font-bold text-gray-900">
+                      {condition.name || condition}
+                    </div>
+                    {condition.diagnosed_date && (
+                      <div className="text-sm text-gray-600">
+                        Diagnosed: {condition.diagnosed_date}
+                      </div>
+                    )}
+                    {condition.current_medication && (
+                      <div className="text-sm text-gray-600">
+                        Medication: {condition.current_medication}
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+
+        {criticalInfo.medications && criticalInfo.medications.length > 0 && (
+          <div className="mt-6">
+            <h4 className="font-semibold text-red-800 mb-3">
+              ⚠️ CURRENT MEDICATIONS
+            </h4>
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              {criticalInfo.medications.map((med, index) => (
+                <div
+                  key={index}
+                  className="bg-blue-50 border border-blue-200 rounded-lg p-4"
+                >
+                  <div className="font-bold text-blue-900">
+                    {med.name || med}
+                  </div>
+                  {med.dosage && (
+                    <div className="text-sm text-blue-700">{med.dosage}</div>
+                  )}
+                  {med.for && (
+                    <div className="text-xs text-blue-600 mt-1">{med.for}</div>
+                  )}
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+      </div>
+    );
+  };
+
+  const EmergencyProtocolPanel = ({ patient, criticalInfo }) => {
+    // Get emergency contacts from patient data
+    const emergencyContacts = patient?.emergencyContacts || [];
+    const primaryContact = emergencyContacts?.find(
+      (contact) => contact.is_primary,
+    );
+    const emergencyContact = emergencyContacts?.find(
+      (contact) => contact.contact_type === "emergency",
+    );
+
+    return (
+      <div className="bg-red-50 border-2 border-red-300 rounded-lg p-6">
+        <h3 className="text-xl font-bold text-red-900 mb-4 flex items-center gap-3">
+          <AlertOctagon className="w-6 h-6" />
+          EMERGENCY PROTOCOL
+        </h3>
+
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          <div>
+            <h4 className="font-semibold text-red-800 mb-3">
+              🆘 EMERGENCY CONTACTS
+            </h4>
+            <div className="space-y-3">
+              {primaryContact && (
+                <div className="bg-white p-4 rounded-lg border border-red-200">
+                  <div className="flex items-start justify-between">
+                    <div>
+                      <div className="font-bold text-gray-900">
+                        {primaryContact.contact_name || "Primary Contact"}
+                        <span className="ml-2 text-xs bg-blue-100 text-blue-800 px-2 py-1 rounded-full">
+                          PRIMARY
+                        </span>
+                      </div>
+                      <div className="text-gray-600 mt-1">
+                        {primaryContact.contact_number}
+                      </div>
+                      {primaryContact.relationship && (
+                        <div className="text-sm text-gray-500 mt-1">
+                          Relationship: {primaryContact.relationship}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {emergencyContact && (
+                <div className="bg-white p-4 rounded-lg border border-red-200">
+                  <div className="flex items-start justify-between">
+                    <div>
+                      <div className="font-bold text-gray-900">
+                        {emergencyContact.contact_name || "Emergency Contact"}
+                        <span className="ml-2 text-xs bg-red-100 text-red-800 px-2 py-1 rounded-full">
+                          EMERGENCY
+                        </span>
+                      </div>
+                      <div className="text-gray-600 mt-1">
+                        {emergencyContact.contact_number}
+                      </div>
+                      {emergencyContact.relationship && (
+                        <div className="text-sm text-gray-500 mt-1">
+                          Relationship: {emergencyContact.relationship}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {!primaryContact && !emergencyContact && (
+                <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
+                  <div className="text-yellow-800 text-center">
+                    <AlertTriangle className="w-6 h-6 mx-auto mb-2" />
+                    <p>No emergency contacts found in patient records</p>
+                  </div>
+                </div>
+              )}
+            </div>
           </div>
 
-          <div className="grid md:grid-cols-2 gap-6">
-            <button
-              onClick={() => selectMode("appointment")}
-              className="bg-white rounded-xl shadow-lg p-8 border-2 border-transparent hover:border-blue-500 transition-all group"
-            >
-              <div className="w-16 h-16 bg-blue-100 rounded-full flex items-center justify-center mb-4 group-hover:bg-blue-500 transition-colors">
-                <Calendar className="w-8 h-8 text-blue-600 group-hover:text-white" />
-              </div>
-              <h2 className="text-2xl font-bold text-gray-900 mb-3">
-                Appointment Check-In
-              </h2>
-              <p className="text-gray-600 mb-4">
-                Verify patient identity and mark appointment arrival
-                automatically
-              </p>
-              <ul className="text-sm text-gray-700 space-y-2 text-left">
-                <li className="flex items-start gap-2">
-                  <CheckCircle className="w-4 h-4 text-green-600 mt-0.5 shrink-0" />
-                  <span>Automatic arrival marking</span>
-                </li>
-                <li className="flex items-start gap-2">
-                  <CheckCircle className="w-4 h-4 text-green-600 mt-0.5 shrink-0" />
-                  <span>Time window validation</span>
-                </li>
-                <li className="flex items-start gap-2">
-                  <CheckCircle className="w-4 h-4 text-green-600 mt-0.5 shrink-0" />
-                  <span>Real-time staff notification</span>
-                </li>
-              </ul>
-            </button>
+          <div>
+            <h4 className="font-semibold text-red-800 mb-3">
+              ⚠️ EMERGENCY INSTRUCTIONS
+            </h4>
+            <div className="bg-white p-4 rounded-lg border border-red-200 space-y-4">
+              {criticalInfo?.allergies && criticalInfo.allergies.length > 0 && (
+                <div>
+                  <div className="font-bold text-red-900 flex items-center gap-2">
+                    <AlertTriangle className="w-4 h-4" />
+                    CRITICAL ALLERGIES
+                  </div>
+                  <div className="mt-2 space-y-2">
+                    {criticalInfo.allergies.slice(0, 3).map((allergy, idx) => (
+                      <div key={idx} className="text-sm">
+                        <span className="font-medium">
+                          • {allergy.name || allergy}
+                        </span>
+                        {allergy.reaction && (
+                          <span className="text-red-700 ml-2">
+                            ({allergy.reaction})
+                          </span>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
 
-            <button
-              onClick={() => selectMode("medical-record")}
-              className="bg-white rounded-xl shadow-lg p-8 border-2 border-transparent hover:border-emerald-500 transition-all group"
-            >
-              <div className="w-16 h-16 bg-emerald-100 rounded-full flex items-center justify-center mb-4 group-hover:bg-emerald-500 transition-colors">
-                <FileText className="w-8 h-8 text-emerald-600 group-hover:text-white" />
+              {criticalInfo?.conditions &&
+                criticalInfo.conditions.length > 0 && (
+                  <div>
+                    <div className="font-bold text-red-900 flex items-center gap-2">
+                      <Activity className="w-4 h-4" />
+                      CHRONIC CONDITIONS
+                    </div>
+                    <div className="mt-2 space-y-2">
+                      {criticalInfo.conditions
+                        .slice(0, 3)
+                        .map((condition, idx) => (
+                          <div key={idx} className="text-sm">
+                            <span className="font-medium">
+                              • {condition.name || condition}
+                            </span>
+                            {condition.current_medication && (
+                              <span className="text-blue-700 ml-2">
+                                Med: {condition.current_medication}
+                              </span>
+                            )}
+                          </div>
+                        ))}
+                    </div>
+                  </div>
+                )}
+
+              {criticalInfo?.medications &&
+                criticalInfo.medications.length > 0 && (
+                  <div>
+                    <div className="font-bold text-red-900 flex items-center gap-2">
+                      <Pill className="w-4 h-4" />
+                      CURRENT MEDICATIONS
+                    </div>
+                    <div className="mt-2 space-y-2">
+                      {criticalInfo.medications.slice(0, 3).map((med, idx) => (
+                        <div key={idx} className="text-sm">
+                          <span className="font-medium">
+                            • {med.name || med}
+                          </span>
+                          {med.dosage && (
+                            <span className="text-gray-600 ml-2">
+                              {med.dosage}
+                            </span>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+              {!criticalInfo?.allergies?.length &&
+                !criticalInfo?.conditions?.length &&
+                !criticalInfo?.medications?.length && (
+                  <div className="text-yellow-700 text-sm">
+                    No critical medical information available in patient records
+                  </div>
+                )}
+
+              <div className="pt-4 border-t border-gray-200">
+                <div className="font-bold text-red-900">
+                  PATIENT INFORMATION
+                </div>
+                <div className="grid grid-cols-2 gap-2 mt-2 text-sm">
+                  <div>
+                    <span className="text-gray-600">Name:</span>
+                    <span className="font-medium ml-2">
+                      {patient?.fullName}
+                    </span>
+                  </div>
+                  <div>
+                    <span className="text-gray-600">Age:</span>
+                    <span className="font-medium ml-2">{patient?.age}</span>
+                  </div>
+                  <div>
+                    <span className="text-gray-600">Blood Type:</span>
+                    <span className="font-medium ml-2">
+                      {patient?.bloodType || "Unknown"}
+                    </span>
+                  </div>
+                  <div>
+                    <span className="text-gray-600">MRN:</span>
+                    <span className="font-medium ml-2">{patient?.mrn}</span>
+                  </div>
+                </div>
               </div>
-              <h2 className="text-2xl font-bold text-gray-900 mb-3">
-                Emergency Medical Lookup
-              </h2>
-              <p className="text-gray-600 mb-4">
-                Quick access to patient records for emergency situations
-              </p>
-              <ul className="text-sm text-gray-700 space-y-2 text-left">
-                <li className="flex items-start gap-2">
-                  <CheckCircle className="w-4 h-4 text-green-600 mt-0.5 shrink-0" />
-                  <span>Instant patient identification</span>
-                </li>
-                <li className="flex items-start gap-2">
-                  <CheckCircle className="w-4 h-4 text-green-600 mt-0.5 shrink-0" />
-                  <span>Critical medical history access</span>
-                </li>
-                <li className="flex items-start gap-2">
-                  <CheckCircle className="w-4 h-4 text-green-600 mt-0.5 shrink-0" />
-                  <span>Allergy and condition alerts</span>
-                </li>
-              </ul>
-            </button>
+            </div>
           </div>
         </div>
       </div>
     );
-  }
+  };
+
+  const RecordIcon = ({ type }) => {
+    const iconConfig = {
+      admission: { icon: Heart, bg: "bg-red-100", color: "text-red-600" },
+      appointment: {
+        icon: Calendar,
+        bg: "bg-blue-100",
+        color: "text-blue-600",
+      },
+      medical_record: {
+        icon: FileText,
+        bg: "bg-green-100",
+        color: "text-green-600",
+      },
+    };
+
+    const config = iconConfig[type] || {
+      icon: FileText,
+      bg: "bg-gray-100",
+      color: "text-gray-600",
+    };
+    const Icon = config.icon;
+
+    return (
+      <div
+        className={`w-10 h-10 rounded-full flex items-center justify-center ${config.bg}`}
+      >
+        <Icon className={`w-5 h-5 ${config.color}`} />
+      </div>
+    );
+  };
+
+  const StatusBadge = ({ status }) => {
+    const statusConfig = {
+      completed: {
+        bg: "bg-green-100",
+        text: "text-green-800",
+        label: "Completed",
+      },
+      discharged: {
+        bg: "bg-blue-100",
+        text: "text-blue-800",
+        label: "Discharged",
+      },
+      active: { bg: "bg-yellow-100", text: "text-yellow-800", label: "Active" },
+      scheduled: {
+        bg: "bg-purple-100",
+        text: "text-purple-800",
+        label: "Scheduled",
+      },
+      cancelled: { bg: "bg-red-100", text: "text-red-800", label: "Cancelled" },
+    };
+
+    const config = statusConfig[status?.toLowerCase()] || {
+      bg: "bg-gray-100",
+      text: "text-gray-800",
+      label: status,
+    };
+
+    return (
+      <span
+        className={`px-2 py-1 text-xs rounded-full ${config.bg} ${config.text}`}
+      >
+        {config.label}
+      </span>
+    );
+  };
+
+  const AdmissionTypeBadge = ({ type }) => (
+    <span className="px-2 py-1 text-xs rounded-full bg-indigo-100 text-indigo-800">
+      {type}
+    </span>
+  );
+
+  const RecordDetails = ({ record }) => {
+    // Get original record for detailed information
+    const originalRecord = record.originalRecord || {};
+
+    return (
+      <div className="p-4 border-t border-gray-200 bg-gray-50">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          {/* Vitals Section */}
+          {(record.vitals || originalRecord.vitals) && (
+            <div className="bg-white p-4 rounded border">
+              <h4 className="font-medium text-gray-900 mb-3 flex items-center gap-2">
+                <Activity className="w-4 h-4" /> Vitals
+              </h4>
+              <div className="grid grid-cols-2 gap-3">
+                {Object.entries(
+                  record.vitals || originalRecord.vitals || {},
+                ).map(([key, value]) => (
+                  <div key={key} className="text-left">
+                    <div className="text-xs text-gray-500 capitalize">
+                      {key.replace(/_/g, " ")}
+                    </div>
+                    <div className="font-semibold">{value}</div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Additional Information */}
+          <div className="space-y-4">
+            {/* Prescriptions */}
+            {(record.prescriptions?.length > 0 ||
+              originalRecord.prescriptions?.length > 0) && (
+              <div className="bg-white p-4 rounded border">
+                <h4 className="font-medium text-gray-900 mb-3 flex items-center gap-2">
+                  <Pill className="w-4 h-4" /> Prescriptions
+                </h4>
+                <div className="space-y-2">
+                  {(
+                    record.prescriptions ||
+                    originalRecord.prescriptions ||
+                    []
+                  ).map((prescription, idx) => (
+                    <div
+                      key={idx}
+                      className="text-sm border-l-2 border-blue-500 pl-2"
+                    >
+                      <div className="font-medium">
+                        {prescription.name || "Unnamed medication"}
+                      </div>
+                      <div className="text-gray-600">
+                        {prescription.dosage || "No dosage specified"}
+                      </div>
+                      {prescription.notes && (
+                        <div className="text-gray-500 text-xs mt-1">
+                          {prescription.notes}
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Admission Details */}
+            {record.admission_id && (
+              <div className="bg-white p-4 rounded border">
+                <h4 className="font-medium text-gray-900 mb-3 flex items-center gap-2">
+                  <Heart className="w-4 h-4" /> Admission Details
+                </h4>
+                <div className="space-y-1 text-sm">
+                  {record.admission_number && (
+                    <div>
+                      <span className="text-gray-600">Admission #:</span>
+                      <span className="font-medium ml-2">
+                        {record.admission_number}
+                      </span>
+                    </div>
+                  )}
+                  {record.diagnosis_at_admission && (
+                    <div>
+                      <span className="text-gray-600">Diagnosis:</span>
+                      <span className="font-medium ml-2">
+                        {record.diagnosis_at_admission}
+                      </span>
+                    </div>
+                  )}
+                  {record.length_of_stay_days && (
+                    <div>
+                      <span className="text-gray-600">Length of Stay:</span>
+                      <span className="font-medium ml-2">
+                        {record.length_of_stay_days} days
+                      </span>
+                    </div>
+                  )}
+                  {originalRecord.admission_source && (
+                    <div>
+                      <span className="text-gray-600">Source:</span>
+                      <span className="font-medium ml-2">
+                        {originalRecord.admission_source}
+                      </span>
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {/* Appointment Details */}
+            {record.type === "appointment" && (
+              <div className="bg-white p-4 rounded border">
+                <h4 className="font-medium text-gray-900 mb-3 flex items-center gap-2">
+                  <Calendar className="w-4 h-4" /> Appointment Details
+                </h4>
+                <div className="space-y-1 text-sm">
+                  {record.appointment_number && (
+                    <div>
+                      <span className="text-gray-600">Appointment #:</span>
+                      <span className="font-medium ml-2">
+                        {record.appointment_number}
+                      </span>
+                    </div>
+                  )}
+                  {originalRecord.appointment_type && (
+                    <div>
+                      <span className="text-gray-600">Type:</span>
+                      <span className="font-medium ml-2">
+                        {originalRecord.appointment_type}
+                      </span>
+                    </div>
+                  )}
+                  {originalRecord.reason && (
+                    <div>
+                      <span className="text-gray-600">Reason:</span>
+                      <span className="font-medium ml-2">
+                        {originalRecord.reason}
+                      </span>
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+    );
+  };
+
+  const TimelineRecord = ({
+    record,
+    expandedRecords,
+    toggleRecordExpansion,
+  }) => (
+    <div className="bg-white rounded-lg border border-gray-200 overflow-hidden hover:shadow-md transition-shadow">
+      <button
+        onClick={() => toggleRecordExpansion(record.id)}
+        className="w-full flex items-center justify-between p-4 hover:bg-gray-50 transition"
+      >
+        <div className="flex items-start gap-3 flex-1">
+          <RecordIcon type={record.type} />
+          <div className="text-left flex-1">
+            <div className="flex items-center gap-2 mb-1 flex-wrap">
+              <h3 className="font-semibold text-gray-900">{record.title}</h3>
+              {record.status && <StatusBadge status={record.status} />}
+              {record.admission_type && (
+                <AdmissionTypeBadge type={record.admission_type} />
+              )}
+            </div>
+            {record.diagnosis && (
+              <p className="text-sm text-gray-600">
+                Diagnosis: {record.diagnosis}
+              </p>
+            )}
+            {record.chiefComplaint && (
+              <p className="text-sm text-gray-600 mt-1">
+                Complaint: {record.chiefComplaint}
+              </p>
+            )}
+            <div className="flex items-center gap-4 mt-2 text-xs text-gray-500 flex-wrap">
+              <span className="flex items-center gap-1">
+                <User className="w-3 h-3" />
+                {record.doctor || "Unknown Doctor"}
+              </span>
+              {record.admission_number && (
+                <span className="flex items-center gap-1">
+                  <FileText className="w-3 h-3" />
+                  {record.admission_number}
+                </span>
+              )}
+              {record.appointment_number && (
+                <span className="flex items-center gap-1">
+                  <Calendar className="w-3 h-3" />
+                  {record.appointment_number}
+                </span>
+              )}
+            </div>
+          </div>
+        </div>
+        {expandedRecords[record.id] ? (
+          <ChevronDown className="w-5 h-5 text-gray-400" />
+        ) : (
+          <ChevronRight className="w-5 h-5 text-gray-400" />
+        )}
+      </button>
+
+      {expandedRecords[record.id] && <RecordDetails record={record} />}
+    </div>
+  );
+
+  const MedicalTimeline = ({ timeline }) => {
+    const typeOptions = [
+      { value: "all", label: "All Types" },
+      { value: "appointment", label: "Appointments" },
+      { value: "admission", label: "Admissions" },
+      { value: "medical_record", label: "Medical Records" },
+    ];
+
+    const dateRangeOptions = [
+      { value: "all", label: "All Time" },
+      { value: "today", label: "Today" },
+      { value: "week", label: "Last 7 Days" },
+      { value: "month", label: "Last 30 Days" },
+      { value: "year", label: "Last Year" },
+    ];
+
+    const statusOptions = [
+      { value: "all", label: "All Status" },
+      { value: "completed", label: "Completed" },
+      { value: "discharged", label: "Discharged" },
+      { value: "active", label: "Active" },
+      { value: "scheduled", label: "Scheduled" },
+      { value: "cancelled", label: "Cancelled" },
+    ];
+
+    const filteredTimeline = timeline.filter((record) => {
+      const matchesSearch =
+        !searchQuery ||
+        record.title?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        record.diagnosis?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        record.doctor?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        record.chiefComplaint
+          ?.toLowerCase()
+          .includes(searchQuery.toLowerCase());
+
+      const matchesType =
+        selectedFilters.type === "all" || record.type === selectedFilters.type;
+
+      const matchesStatus =
+        selectedFilters.status === "all" ||
+        record.status === selectedFilters.status;
+
+      const matchesDateRange = () => {
+        if (selectedFilters.dateRange === "all") return true;
+
+        const recordDate = new Date(record.date);
+        const now = new Date();
+
+        switch (selectedFilters.dateRange) {
+          case "today":
+            return recordDate.toDateString() === now.toDateString();
+          case "week":
+            const weekAgo = new Date(now);
+            weekAgo.setDate(weekAgo.getDate() - 7);
+            return recordDate >= weekAgo;
+          case "month":
+            const monthAgo = new Date(now);
+            monthAgo.setMonth(monthAgo.getMonth() - 1);
+            return recordDate >= monthAgo;
+          case "year":
+            const yearAgo = new Date(now);
+            yearAgo.setFullYear(yearAgo.getFullYear() - 1);
+            return recordDate >= yearAgo;
+          default:
+            return true;
+        }
+      };
+
+      return (
+        matchesSearch && matchesType && matchesStatus && matchesDateRange()
+      );
+    });
+
+    const groupedByDate = {};
+    filteredTimeline.forEach((record) => {
+      const date = new Date(record.date).toLocaleDateString("en-US", {
+        year: "numeric",
+        month: "long",
+        day: "numeric",
+      });
+      if (!groupedByDate[date]) {
+        groupedByDate[date] = [];
+      }
+      groupedByDate[date].push(record);
+    });
+
+    const dates = Object.keys(groupedByDate).sort(
+      (a, b) => new Date(b) - new Date(a),
+    );
+
+    return (
+      <div className="space-y-4">
+        <div className="bg-white rounded-lg border border-gray-200 p-4">
+          <div className="space-y-4">
+            <div className="relative">
+              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5" />
+              <input
+                type="text"
+                placeholder="Search records by diagnosis, doctor, complaint..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                onKeyDown={(e) => e.stopPropagation()}
+                className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-red-500 focus:outline-none"
+                autoFocus={false}
+              />
+              {searchQuery && (
+                <button
+                  onClick={() => setSearchQuery("")}
+                  className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                >
+                  ✕
+                </button>
+              )}
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Record Type
+                </label>
+                <select
+                  value={selectedFilters.type}
+                  onChange={(e) =>
+                    setSelectedFilters({
+                      ...selectedFilters,
+                      type: e.target.value,
+                    })
+                  }
+                  className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                >
+                  {typeOptions.map((option) => (
+                    <option key={option.value} value={option.value}>
+                      {option.label}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Date Range
+                </label>
+                <select
+                  value={selectedFilters.dateRange}
+                  onChange={(e) =>
+                    setSelectedFilters({
+                      ...selectedFilters,
+                      dateRange: e.target.value,
+                    })
+                  }
+                  className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                >
+                  {dateRangeOptions.map((option) => (
+                    <option key={option.value} value={option.value}>
+                      {option.label}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Status
+                </label>
+                <select
+                  value={selectedFilters.status}
+                  onChange={(e) =>
+                    setSelectedFilters({
+                      ...selectedFilters,
+                      status: e.target.value,
+                    })
+                  }
+                  className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                >
+                  {statusOptions.map((option) => (
+                    <option key={option.value} value={option.value}>
+                      {option.label}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </div>
+
+            {(selectedFilters.type !== "all" ||
+              selectedFilters.dateRange !== "all" ||
+              selectedFilters.status !== "all") && (
+              <div className="flex items-center gap-2 flex-wrap">
+                <span className="text-sm text-gray-600">Active filters:</span>
+                {selectedFilters.type !== "all" && (
+                  <span className="inline-flex items-center gap-1 bg-blue-100 text-blue-800 px-2 py-1 rounded-full text-xs">
+                    {
+                      typeOptions.find(
+                        (opt) => opt.value === selectedFilters.type,
+                      )?.label
+                    }
+                    <button
+                      onClick={() =>
+                        setSelectedFilters({ ...selectedFilters, type: "all" })
+                      }
+                      className="text-blue-600 hover:text-blue-800"
+                    >
+                      ✕
+                    </button>
+                  </span>
+                )}
+                {selectedFilters.dateRange !== "all" && (
+                  <span className="inline-flex items-center gap-1 bg-green-100 text-green-800 px-2 py-1 rounded-full text-xs">
+                    {
+                      dateRangeOptions.find(
+                        (opt) => opt.value === selectedFilters.dateRange,
+                      )?.label
+                    }
+                    <button
+                      onClick={() =>
+                        setSelectedFilters({
+                          ...selectedFilters,
+                          dateRange: "all",
+                        })
+                      }
+                      className="text-green-600 hover:text-green-800"
+                    >
+                      ✕
+                    </button>
+                  </span>
+                )}
+                {selectedFilters.status !== "all" && (
+                  <span className="inline-flex items-center gap-1 bg-purple-100 text-purple-800 px-2 py-1 rounded-full text-xs">
+                    {
+                      statusOptions.find(
+                        (opt) => opt.value === selectedFilters.status,
+                      )?.label
+                    }
+                    <button
+                      onClick={() =>
+                        setSelectedFilters({
+                          ...selectedFilters,
+                          status: "all",
+                        })
+                      }
+                      className="text-purple-600 hover:text-purple-800"
+                    >
+                      ✕
+                    </button>
+                  </span>
+                )}
+                <button
+                  onClick={() =>
+                    setSelectedFilters({
+                      type: "all",
+                      dateRange: "all",
+                      status: "all",
+                    })
+                  }
+                  className="text-sm text-red-600 hover:text-red-800"
+                >
+                  Clear all filters
+                </button>
+              </div>
+            )}
+
+            <div className="flex items-center justify-between">
+              <div className="text-sm text-gray-600">
+                Showing {filteredTimeline.length} of {timeline.length} records
+              </div>
+              <div className="text-sm">
+                <span className="font-medium">{filteredTimeline.length}</span>{" "}
+                results found
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {dates.length > 0 ? (
+          <div className="space-y-6">
+            {dates.map((date) => (
+              <div key={date} className="space-y-3">
+                <h3 className="text-lg font-bold text-gray-900 border-b pb-2">
+                  {date}
+                </h3>
+                <div className="space-y-3">
+                  {groupedByDate[date].map((record) => (
+                    <TimelineRecord
+                      key={record.id}
+                      record={record}
+                      expandedRecords={expandedRecords}
+                      toggleRecordExpansion={toggleRecordExpansion}
+                    />
+                  ))}
+                </div>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <div className="text-center py-12 bg-gray-50 rounded-lg border border-dashed border-gray-300">
+            <Search className="w-12 h-12 text-gray-400 mx-auto mb-4" />
+            <h3 className="text-lg font-medium text-gray-900 mb-2">
+              No records found
+            </h3>
+            <p className="text-gray-600">
+              {searchQuery ||
+              selectedFilters.type !== "all" ||
+              selectedFilters.dateRange !== "all" ||
+              selectedFilters.status !== "all"
+                ? "Try adjusting your search or filters"
+                : "No medical records available for this patient"}
+            </p>
+            {(searchQuery ||
+              selectedFilters.type !== "all" ||
+              selectedFilters.dateRange !== "all" ||
+              selectedFilters.status !== "all") && (
+              <button
+                onClick={() => {
+                  setSearchQuery("");
+                  setSelectedFilters({
+                    type: "all",
+                    dateRange: "all",
+                    status: "all",
+                  });
+                }}
+                className="mt-4 text-blue-600 hover:text-blue-800 text-sm font-medium"
+              >
+                Clear all filters and search
+              </button>
+            )}
+          </div>
+        )}
+      </div>
+    );
+  };
 
   if (!modelsLoaded) {
     return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4">
-        <div className="bg-white rounded-lg shadow-md p-10 text-center max-w-md w-full border border-gray-200">
-          <div className="relative w-16 h-16 mx-auto mb-6">
-            <div className="absolute inset-0 rounded-full border-4 border-gray-200"></div>
-            <div className="absolute inset-0 rounded-full border-4 border-t-blue-600 animate-spin"></div>
+      <div className="min-h-screen bg-gradient-to-br from-red-50 to-orange-50 flex items-center justify-center p-4">
+        <div className="bg-white rounded-xl shadow-xl p-10 text-center max-w-md w-full border border-gray-200">
+          <div className="relative w-20 h-20 mx-auto mb-6">
+            <div className="absolute inset-0 rounded-full border-4 border-gray-300"></div>
+            <div className="absolute inset-0 rounded-full border-4 border-t-red-600 animate-spin"></div>
           </div>
-          <h2 className="text-xl font-semibold text-gray-800 mb-2">
-            Initializing System
+          <h2 className="text-2xl font-bold text-gray-900 mb-3">
+            LOADING EMERGENCY SYSTEM
           </h2>
-          <p className="text-gray-600 text-sm">
-            Loading facial recognition models...
+          <p className="text-gray-600 mb-4">
+            Initializing facial recognition for emergency identification
           </p>
+          <div className="text-sm text-red-600 font-medium">
+            ⚠️ This system is for emergency use only
+          </div>
         </div>
       </div>
     );
@@ -800,44 +1784,223 @@ function FaceVerificationSystem() {
 
   if (isVerifying) {
     return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4">
-        <div className="bg-white rounded-lg shadow-md p-10 text-center max-w-lg w-full border border-gray-200">
-          <div className="w-20 h-20 mx-auto mb-6 text-blue-600">
-            <Shield className="w-full h-full" />
+      <div className="min-h-screen bg-gradient-to-br from-red-50 to-orange-50 flex items-center justify-center p-4">
+        <div className="bg-white rounded-xl shadow-xl p-10 text-center max-w-lg w-full border border-gray-200">
+          <div className="w-24 h-24 mx-auto mb-8 text-red-600">
+            <Zap className="w-full h-full animate-pulse" />
           </div>
-          <h2 className="text-2xl font-semibold text-gray-800 mb-3">
-            {mode === "appointment"
-              ? "Verifying Appointment"
-              : "Retrieving Medical Records"}
+          <h2 className="text-3xl font-bold text-gray-900 mb-4">
+            EMERGENCY IDENTIFICATION IN PROGRESS
           </h2>
           <p className="text-gray-600 mb-8">
-            Please wait while we process your facial biometrics...
+            Retrieving critical medical information for emergency response...
           </p>
           <div className="space-y-4">
             <div className="bg-gray-50 rounded-lg p-4 border border-gray-200">
               <div className="flex items-center justify-between mb-2">
                 <span className="text-sm font-medium text-gray-700">
-                  Face Detection
+                  Face Detection & Matching
                 </span>
-                <span className="text-xs font-semibold text-blue-600">
-                  100%
+                <span className="text-xs font-semibold text-red-600">
+                  PROCESSING
                 </span>
               </div>
-              <div className="h-2 bg-gray-200 rounded-full overflow-hidden">
-                <div className="h-full bg-blue-600 rounded-full w-full transition-all"></div>
+              <div className="h-2.5 bg-gray-200 rounded-full overflow-hidden">
+                <div className="h-full bg-gradient-to-r from-red-500 to-orange-500 rounded-full w-4/5 animate-pulse"></div>
               </div>
             </div>
             <div className="bg-gray-50 rounded-lg p-4 border border-gray-200">
               <div className="flex items-center justify-between mb-2">
                 <span className="text-sm font-medium text-gray-700">
-                  Database Matching
+                  Medical Records Access
                 </span>
-                <span className="text-xs font-semibold text-blue-600">
-                  Processing...
+                <span className="text-xs font-semibold text-red-600">
+                  RETRIEVING
                 </span>
               </div>
-              <div className="h-2 bg-gray-200 rounded-full overflow-hidden">
-                <div className="h-full bg-blue-600 rounded-full w-3/4 animate-pulse transition-all"></div>
+              <div className="h-2.5 bg-gray-200 rounded-full overflow-hidden">
+                <div className="h-full bg-gradient-to-r from-orange-500 to-red-500 rounded-full w-3/4 animate-pulse"></div>
+              </div>
+            </div>
+          </div>
+          <div className="mt-8 text-sm text-red-600 font-medium bg-red-50 p-3 rounded-lg">
+            ⚡ Emergency mode: Bypassing normal security protocols for immediate
+            access
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (verificationResult && verificationResult.success) {
+    return (
+      <div className="min-h-screen bg-gray-50 p-4">
+        <div className="max-w-7xl mx-auto space-y-6">
+          <div className="bg-gradient-to-r from-red-600 to-orange-600 text-white rounded-xl shadow-xl p-6">
+            <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+              <div className="flex-1">
+                <div className="flex items-center gap-3 mb-2">
+                  <div className="w-14 h-14 bg-white/20 rounded-full flex items-center justify-center backdrop-blur-sm">
+                    <Heart className="w-7 h-7" />
+                  </div>
+                  <div>
+                    <h1 className="text-2xl md:text-3xl font-bold">
+                      EMERGENCY MEDICAL RECORDS ACCESSED
+                    </h1>
+                    <p className="text-white/90">
+                      Critical patient information retrieved successfully
+                    </p>
+                  </div>
+                </div>
+              </div>
+              <div className="flex items-center gap-4">
+                <div className="bg-white/20 backdrop-blur-sm rounded-lg p-3">
+                  <div className="flex items-center gap-2">
+                    <Shield className="w-5 h-5" />
+                    <div>
+                      <div className="text-sm">Confidence</div>
+                      <div className="text-2xl font-bold">
+                        {verificationResult.confidence.toFixed(1)}%
+                      </div>
+                    </div>
+                  </div>
+                </div>
+                <button
+                  onClick={manuallyRestart}
+                  className="bg-white text-red-600 px-6 py-3 rounded-lg hover:bg-gray-100 transition font-bold flex items-center gap-2"
+                >
+                  <RefreshCw className="w-5 h-5" />
+                  NEW PATIENT
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <CriticalInfoPanel
+            criticalInfo={verificationResult.medicalRecords.criticalInfo}
+          />
+
+          <PatientInfoCard patient={verificationResult.patient} />
+
+          <div className="bg-white rounded-xl shadow-md border border-gray-200 overflow-hidden">
+            <div className="border-b border-gray-200">
+              <nav className="flex flex-wrap -mb-px">
+                <button
+                  onClick={() => setActiveTab("overview")}
+                  className={`px-6 py-4 font-bold text-sm border-b-2 whitespace-nowrap ${
+                    activeTab === "overview"
+                      ? "border-red-600 text-red-600"
+                      : "border-transparent text-gray-500 hover:text-gray-700"
+                  }`}
+                >
+                  <span className="flex items-center gap-2">
+                    <Activity className="w-4 h-4" />
+                    Overview
+                  </span>
+                </button>
+                <button
+                  onClick={() => setActiveTab("timeline")}
+                  className={`px-6 py-4 font-bold text-sm border-b-2 whitespace-nowrap ${
+                    activeTab === "timeline"
+                      ? "border-red-600 text-red-600"
+                      : "border-transparent text-gray-500 hover:text-gray-700"
+                  }`}
+                >
+                  <span className="flex items-center gap-2">
+                    <Calendar className="w-4 h-4" />
+                    Medical Timeline
+                  </span>
+                </button>
+                <button
+                  onClick={() => setActiveTab("emergency")}
+                  className={`px-6 py-4 font-bold text-sm border-b-2 whitespace-nowrap ${
+                    activeTab === "emergency"
+                      ? "border-red-600 text-red-600"
+                      : "border-transparent text-gray-500 hover:text-gray-700"
+                  }`}
+                >
+                  <span className="flex items-center gap-2">
+                    <AlertOctagon className="w-4 h-4" />
+                    Emergency Protocol
+                  </span>
+                </button>
+              </nav>
+            </div>
+
+            <div className="p-6">
+              {activeTab === "overview" && (
+                <div className="space-y-6">
+                  <QuickStats
+                    summary={verificationResult.medicalRecords.summary}
+                  />
+
+                  <div className="bg-white border border-blue-300 rounded-lg p-6">
+                    <h3 className="text-lg font-bold text-blue-900 mb-4">
+                      Current Medications
+                    </h3>
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                      {verificationResult.medicalRecords.criticalInfo
+                        ?.medications?.length > 0 ? (
+                        verificationResult.medicalRecords.criticalInfo.medications.map(
+                          (med, idx) => (
+                            <div
+                              key={idx}
+                              className="bg-blue-50 border border-blue-200 rounded-lg p-4"
+                            >
+                              <div className="font-bold text-blue-900">
+                                {med.name || med}
+                              </div>
+                              {med.dosage && (
+                                <div className="text-sm text-blue-700">
+                                  {med.dosage}
+                                </div>
+                              )}
+                              {med.for && (
+                                <div className="text-xs text-blue-600 mt-1">
+                                  {med.for}
+                                </div>
+                              )}
+                            </div>
+                          ),
+                        )
+                      ) : (
+                        <div className="col-span-3 text-center py-4 text-gray-500">
+                          No current medications found in records
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {activeTab === "timeline" && (
+                <MedicalTimeline
+                  timeline={verificationResult.medicalRecords.timeline}
+                />
+              )}
+
+              {activeTab === "emergency" && (
+                <EmergencyProtocolPanel
+                  patient={verificationResult.patient}
+                  criticalInfo={verificationResult.medicalRecords.criticalInfo}
+                />
+              )}
+            </div>
+          </div>
+
+          <div className="bg-white rounded-xl shadow-md border border-gray-200 p-4">
+            <div className="flex flex-col md:flex-row justify-between items-center gap-4">
+              <div className="text-sm text-gray-600">
+                <span className="font-bold">Emergency Access:</span>{" "}
+                {new Date(verificationResult.accessTimestamp).toLocaleString()}
+              </div>
+              <div className="flex items-center gap-4">
+                <button className="text-sm text-gray-600 hover:text-gray-900">
+                  Privacy Notice
+                </button>
+                <button className="text-sm text-red-600 hover:text-red-700 font-bold">
+                  🚨 REPORT EMERGENCY
+                </button>
               </div>
             </div>
           </div>
@@ -846,567 +2009,65 @@ function FaceVerificationSystem() {
     );
   }
 
-  if (verificationResult) {
+  if (verificationResult && !verificationResult.success) {
     return (
-      <div className="min-h-screen bg-gray-50 p-4 py-8">
-        <div className="max-w-4xl mx-auto">
-          <div className="bg-white rounded-lg shadow-md border border-gray-200 overflow-hidden">
-            <div
-              className={`p-6 text-white ${
-                verificationResult.scenario === "success" ||
-                verificationResult.scenario === "medical_record_found"
-                  ? "bg-linear-to-r from-emerald-600 to-emerald-700"
-                  : verificationResult.scenario === "no_face_data" ||
-                      verificationResult.scenario === "no_medical_record"
-                    ? "bg-linear-to-r from-gray-600 to-gray-700"
-                    : verificationResult.scenario === "too_late"
-                      ? "bg-linear-to-r from-red-600 to-red-700"
-                      : "bg-linear-to-r from-amber-600 to-amber-700"
-              }`}
-            >
-              <div className="flex items-center gap-3">
-                {mode === "appointment" ? (
-                  <Calendar className="w-8 h-8" />
-                ) : (
-                  <FileText className="w-8 h-8" />
-                )}
-                <div>
-                  <h1 className="text-2xl font-semibold">
-                    {mode === "appointment"
-                      ? "Appointment Verification"
-                      : "Medical Record Lookup"}
-                  </h1>
-                  <p className="text-white/90 text-sm">
-                    {verificationResult.message}
-                  </p>
-                </div>
-              </div>
+      <div className="min-h-screen bg-gradient-to-br from-red-50 to-orange-50 flex items-center justify-center p-4">
+        <div className="max-w-md w-full">
+          <div className="bg-white rounded-xl shadow-xl border border-gray-200 overflow-hidden">
+            <div className="bg-gradient-to-r from-red-600 to-orange-600 text-white p-8 text-center">
+              <XCircle className="w-16 h-16 mx-auto mb-4" />
+              <h1 className="text-2xl font-bold">PATIENT NOT IDENTIFIED</h1>
+              <p className="text-white/90 mt-2">
+                Emergency identification failed
+              </p>
             </div>
 
-            <div className="p-6">
-              {verificationResult.liveFaceImage && (
-                <div className="mb-6 text-center">
-                  <img
-                    src={verificationResult.liveFaceImage}
-                    alt="Captured Face"
-                    className="rounded-lg shadow-md mx-auto max-w-sm w-full border border-gray-200"
-                  />
+            <div className="p-8">
+              <div className="text-center mb-8">
+                <div className="w-24 h-24 mx-auto mb-6 text-gray-400">
+                  <User className="w-full h-full" />
                 </div>
-              )}
+                <h3 className="text-xl font-bold text-gray-900 mb-3">
+                  NO MEDICAL RECORDS FOUND
+                </h3>
+                <p className="text-gray-600 mb-6">
+                  Patient's face not registered in emergency database
+                </p>
+              </div>
 
-              {/* Appointment Mode Results */}
-              {mode === "appointment" &&
-                verificationResult.scenario === "success" && (
-                  <div className="space-y-4">
-                    <div className="bg-emerald-50 border-2 border-emerald-300 rounded-lg p-6">
-                      <div className="flex items-center gap-3 mb-4">
-                        <div className="w-12 h-12 bg-emerald-100 rounded-full flex items-center justify-center">
-                          <CheckCircle className="w-7 h-7 text-emerald-600" />
-                        </div>
-                        <div>
-                          <h3 className="text-lg font-bold text-emerald-900">
-                            Check-In Successful
-                          </h3>
-                          <p className="text-sm text-emerald-700">
-                            Patient marked as arrived
-                          </p>
-                        </div>
-                      </div>
+              <div className="bg-red-50 border border-red-200 rounded-lg p-6 mb-8">
+                <h4 className="font-bold text-red-900 mb-4">
+                  IMMEDIATE ACTIONS REQUIRED:
+                </h4>
+                <ul className="space-y-3 text-sm text-red-800">
+                  <li className="flex items-start gap-3">
+                    <AlertTriangle className="w-5 h-5 text-red-600 flex-shrink-0 mt-0.5" />
+                    <span>Proceed with MANUAL patient identification</span>
+                  </li>
+                  <li className="flex items-start gap-3">
+                    <AlertTriangle className="w-5 h-5 text-red-600 flex-shrink-0 mt-0.5" />
+                    <span>
+                      Check for identification documents or medical alert
+                      jewelry
+                    </span>
+                  </li>
+                  <li className="flex items-start gap-3">
+                    <AlertTriangle className="w-5 h-5 text-red-600 flex-shrink-0 mt-0.5" />
+                    <span>Contact hospital administration immediately</span>
+                  </li>
+                </ul>
+              </div>
 
-                      <div className="grid md:grid-cols-2 gap-4">
-                        <div className="bg-white rounded-lg p-4 border border-emerald-200">
-                          <div className="text-xs text-gray-600 mb-1">
-                            Patient Name
-                          </div>
-                          <div className="text-lg font-bold text-gray-900">
-                            {verificationResult.patient.name}
-                          </div>
-                        </div>
-                        <div className="bg-white rounded-lg p-4 border border-emerald-200">
-                          <div className="text-xs text-gray-600 mb-1">
-                            Patient ID
-                          </div>
-                          <div className="text-lg font-bold text-gray-900">
-                            {verificationResult.patient.id}
-                          </div>
-                        </div>
-                        <div className="bg-white rounded-lg p-4 border border-emerald-200">
-                          <div className="text-xs text-gray-600 mb-1">
-                            Doctor
-                          </div>
-                          <div className="text-lg font-bold text-gray-900">
-                            {verificationResult.appointment.doctor}
-                          </div>
-                        </div>
-                        <div className="bg-white rounded-lg p-4 border border-emerald-200">
-                          <div className="text-xs text-gray-600 mb-1">
-                            Department
-                          </div>
-                          <div className="text-lg font-bold text-gray-900">
-                            {verificationResult.appointment.department}
-                          </div>
-                        </div>
-                        <div className="bg-white rounded-lg p-4 border border-emerald-200">
-                          <div className="text-xs text-gray-600 mb-1">
-                            Appointment Time
-                          </div>
-                          <div className="text-lg font-bold text-gray-900">
-                            {verificationResult.appointment.time}
-                          </div>
-                        </div>
-                        <div className="bg-white rounded-lg p-4 border border-emerald-200">
-                          <div className="text-xs text-gray-600 mb-1">
-                            Arrival Time
-                          </div>
-                          <div className="text-lg font-bold text-gray-900">
-                            {verificationResult.appointment.currentTime}
-                          </div>
-                        </div>
-                      </div>
-
-                      {verificationResult.notificationSent && (
-                        <div className="mt-4 bg-blue-50 border border-blue-200 rounded-lg p-4">
-                          <div className="flex items-center gap-2 text-blue-800">
-                            <CheckCircle className="w-5 h-5" />
-                            <span className="font-medium text-sm">
-                              Receptionist and doctor have been notified
-                            </span>
-                          </div>
-                        </div>
-                      )}
-                    </div>
-
-                    <div className="bg-white rounded-lg p-4 border border-gray-200">
-                      <div className="text-xs text-gray-600 mb-2">
-                        Match Confidence
-                      </div>
-                      <div className="text-3xl font-bold text-gray-800 mb-3">
-                        {verificationResult.confidence.toFixed(1)}%
-                      </div>
-                      <div className="h-2.5 bg-gray-200 rounded-full overflow-hidden">
-                        <div
-                          className="h-full bg-emerald-500 transition-all"
-                          style={{ width: `${verificationResult.confidence}%` }}
-                        ></div>
-                      </div>
-                    </div>
-                  </div>
-                )}
-
-              {mode === "appointment" &&
-                verificationResult.scenario === "too_early" && (
-                  <div className="space-y-4">
-                    <div className="bg-amber-50 border-2 border-amber-300 rounded-lg p-6">
-                      <div className="flex items-center gap-3 mb-4">
-                        <div className="w-12 h-12 bg-amber-100 rounded-full flex items-center justify-center">
-                          <Clock className="w-7 h-7 text-amber-600" />
-                        </div>
-                        <div>
-                          <h3 className="text-lg font-bold text-amber-900">
-                            Too Early to Check In
-                          </h3>
-                          <p className="text-sm text-amber-700">
-                            Please return closer to your appointment time
-                          </p>
-                        </div>
-                      </div>
-
-                      <div className="grid md:grid-cols-2 gap-4">
-                        <div className="bg-white rounded-lg p-4 border border-amber-200">
-                          <div className="text-xs text-gray-600 mb-1">
-                            Patient Name
-                          </div>
-                          <div className="text-lg font-bold text-gray-900">
-                            {verificationResult.patient.name}
-                          </div>
-                        </div>
-                        <div className="bg-white rounded-lg p-4 border border-amber-200">
-                          <div className="text-xs text-gray-600 mb-1">
-                            Patient ID
-                          </div>
-                          <div className="text-lg font-bold text-gray-900">
-                            {verificationResult.patient.id}
-                          </div>
-                        </div>
-                        <div className="bg-white rounded-lg p-4 border border-amber-200">
-                          <div className="text-xs text-gray-600 mb-1">
-                            Appointment Time
-                          </div>
-                          <div className="text-lg font-bold text-gray-900">
-                            {verificationResult.appointment.time}
-                          </div>
-                        </div>
-                        <div className="bg-white rounded-lg p-4 border border-amber-200">
-                          <div className="text-xs text-gray-600 mb-1">
-                            Current Time
-                          </div>
-                          <div className="text-lg font-bold text-gray-900">
-                            {verificationResult.appointment.currentTime}
-                          </div>
-                        </div>
-                        <div className="bg-white rounded-lg p-4 border border-amber-200">
-                          <div className="text-xs text-gray-600 mb-1">
-                            Doctor
-                          </div>
-                          <div className="text-lg font-bold text-gray-900">
-                            {verificationResult.appointment.doctor}
-                          </div>
-                        </div>
-                        <div className="bg-white rounded-lg p-4 border border-amber-200">
-                          <div className="text-xs text-gray-600 mb-1">
-                            Department
-                          </div>
-                          <div className="text-lg font-bold text-gray-900">
-                            {verificationResult.appointment.department}
-                          </div>
-                        </div>
-                      </div>
-
-                      <div className="mt-4 bg-white border border-amber-200 rounded-lg p-4">
-                        <div className="text-sm text-gray-700">
-                          <strong>Check-in window:</strong> Opens 1 hour before
-                          your appointment time. Please return after that time.
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                )}
-
-              {mode === "appointment" &&
-                verificationResult.scenario === "already_arrived" && (
-                  <div className="space-y-4">
-                    <div className="bg-blue-50 border-2 border-blue-300 rounded-lg p-6">
-                      <div className="flex items-center gap-3 mb-4">
-                        <div className="w-12 h-12 bg-blue-100 rounded-full flex items-center justify-center">
-                          <CheckCircle className="w-7 h-7 text-blue-600" />
-                        </div>
-                        <div>
-                          <h3 className="text-lg font-bold text-blue-900">
-                            Already Checked In
-                          </h3>
-                          <p className="text-sm text-blue-700">
-                            You have already checked in for this appointment
-                          </p>
-                        </div>
-                      </div>
-
-                      <div className="grid md:grid-cols-2 gap-4">
-                        <div className="bg-white rounded-lg p-4 border border-blue-200">
-                          <div className="text-xs text-gray-600 mb-1">
-                            Patient Name
-                          </div>
-                          <div className="text-lg font-bold text-gray-900">
-                            {verificationResult.patient.name}
-                          </div>
-                        </div>
-                        <div className="bg-white rounded-lg p-4 border border-blue-200">
-                          <div className="text-xs text-gray-600 mb-1">
-                            Patient ID
-                          </div>
-                          <div className="text-lg font-bold text-gray-900">
-                            {verificationResult.patient.id}
-                          </div>
-                        </div>
-                        <div className="bg-white rounded-lg p-4 border border-blue-200">
-                          <div className="text-xs text-gray-600 mb-1">
-                            Appointment Time
-                          </div>
-                          <div className="text-lg font-bold text-gray-900">
-                            {verificationResult.appointment.time}
-                          </div>
-                        </div>
-                        <div className="bg-white rounded-lg p-4 border border-blue-200">
-                          <div className="text-xs text-gray-600 mb-1">
-                            Original Arrival Time
-                          </div>
-                          <div className="text-lg font-bold text-gray-900">
-                            {verificationResult.appointment.arrivalTime}
-                          </div>
-                        </div>
-                      </div>
-
-                      <div className="mt-4 bg-white border border-blue-200 rounded-lg p-4">
-                        <div className="text-sm text-gray-700">
-                          <strong>Status:</strong> Your appointment is already
-                          marked as arrived. Please proceed to the waiting area.
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                )}
-
-              {mode === "appointment" &&
-                verificationResult.scenario === "too_late" && (
-                  <div className="space-y-4">
-                    <div className="bg-red-50 border-2 border-red-300 rounded-lg p-6">
-                      <div className="flex items-center gap-3 mb-4">
-                        <div className="w-12 h-12 bg-red-100 rounded-full flex items-center justify-center">
-                          <XCircle className="w-7 h-7 text-red-600" />
-                        </div>
-                        <div>
-                          <h3 className="text-lg font-bold text-red-900">
-                            Appointment Window Passed
-                          </h3>
-                          <p className="text-sm text-red-700">
-                            Status automatically updated to No-Show
-                          </p>
-                        </div>
-                      </div>
-
-                      <div className="grid md:grid-cols-2 gap-4">
-                        <div className="bg-white rounded-lg p-4 border border-red-200">
-                          <div className="text-xs text-gray-600 mb-1">
-                            Patient Name
-                          </div>
-                          <div className="text-lg font-bold text-gray-900">
-                            {verificationResult.patient.name}
-                          </div>
-                        </div>
-                        <div className="bg-white rounded-lg p-4 border border-red-200">
-                          <div className="text-xs text-gray-600 mb-1">
-                            Patient ID
-                          </div>
-                          <div className="text-lg font-bold text-gray-900">
-                            {verificationResult.patient.id}
-                          </div>
-                        </div>
-                        <div className="bg-white rounded-lg p-4 border border-red-200">
-                          <div className="text-xs text-gray-600 mb-1">
-                            Appointment Time
-                          </div>
-                          <div className="text-lg font-bold text-gray-900">
-                            {verificationResult.appointment.time}
-                          </div>
-                        </div>
-                        <div className="bg-white rounded-lg p-4 border border-red-200">
-                          <div className="text-xs text-gray-600 mb-1">
-                            Current Time
-                          </div>
-                          <div className="text-lg font-bold text-gray-900">
-                            {verificationResult.appointment.currentTime}
-                          </div>
-                        </div>
-                      </div>
-
-                      <div className="mt-4 bg-white border border-red-200 rounded-lg p-4">
-                        <div className="text-sm text-gray-700 space-y-2">
-                          <p>
-                            <strong>Appointment missed.</strong> Please contact
-                            reception to reschedule.
-                          </p>
-                          <p className="text-xs text-gray-600">
-                            Note: The appointment has been marked as No-Show in
-                            the system.
-                          </p>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                )}
-
-              {mode === "appointment" &&
-                verificationResult.scenario === "no_face_data" && (
-                  <div className="bg-gray-50 border-2 border-gray-300 rounded-lg p-6">
-                    <div className="flex items-center gap-3 mb-4">
-                      <div className="w-12 h-12 bg-gray-100 rounded-full flex items-center justify-center">
-                        <AlertCircle className="w-7 h-7 text-gray-600" />
-                      </div>
-                      <div>
-                        <h3 className="text-lg font-bold text-gray-900">
-                          No Registration Found
-                        </h3>
-                        <p className="text-sm text-gray-700">
-                          Face not found in the system
-                        </p>
-                      </div>
-                    </div>
-
-                    <div className="bg-white border border-gray-200 rounded-lg p-4">
-                      <p className="text-sm text-gray-700 mb-3">
-                        Your face is not registered in our system. Please
-                        proceed to the reception desk for manual check-in.
-                      </p>
-                      <div className="text-xs text-gray-600">
-                        <strong>Note:</strong> Face registration is required for
-                        automated check-in.
-                      </div>
-                    </div>
-                  </div>
-                )}
-
-              {mode === "medical-record" &&
-                verificationResult.scenario === "medical_record_found" && (
-                  <div className="space-y-4">
-                    <div className="bg-emerald-50 border-2 border-emerald-300 rounded-lg p-6">
-                      <div className="flex items-center gap-3 mb-4">
-                        <div className="w-12 h-12 bg-emerald-100 rounded-full flex items-center justify-center">
-                          <User className="w-7 h-7 text-emerald-600" />
-                        </div>
-                        <div>
-                          <h3 className="text-lg font-bold text-emerald-900">
-                            Patient Identified
-                          </h3>
-                          <p className="text-sm text-emerald-700">
-                            Medical records retrieved successfully
-                          </p>
-                        </div>
-                      </div>
-
-                      <div className="grid md:grid-cols-2 gap-4 mb-4">
-                        <div className="bg-white rounded-lg p-4 border border-emerald-200">
-                          <div className="text-xs text-gray-600 mb-1">
-                            Patient Name
-                          </div>
-                          <div className="text-lg font-bold text-gray-900">
-                            {verificationResult.patient.name}
-                          </div>
-                        </div>
-                        <div className="bg-white rounded-lg p-4 border border-emerald-200">
-                          <div className="text-xs text-gray-600 mb-1">
-                            Patient ID
-                          </div>
-                          <div className="text-lg font-bold text-gray-900">
-                            {verificationResult.patient.id}
-                          </div>
-                        </div>
-                        <div className="bg-white rounded-lg p-4 border border-emerald-200">
-                          <div className="text-xs text-gray-600 mb-1">Age</div>
-                          <div className="text-lg font-bold text-gray-900">
-                            {verificationResult.patient.age} years
-                          </div>
-                        </div>
-                        <div className="bg-white rounded-lg p-4 border border-emerald-200">
-                          <div className="text-xs text-gray-600 mb-1">
-                            Blood Type
-                          </div>
-                          <div className="text-lg font-bold text-gray-900">
-                            {verificationResult.patient.bloodType}
-                          </div>
-                        </div>
-                      </div>
-
-                      <div className="bg-red-50 border border-red-300 rounded-lg p-4 mb-4">
-                        <div className="flex items-center gap-2 mb-2">
-                          <AlertTriangle className="w-5 h-5 text-red-600" />
-                          <h4 className="font-bold text-red-900">ALLERGIES</h4>
-                        </div>
-                        <div className="flex flex-wrap gap-2">
-                          {verificationResult.patient.allergies.map(
-                            (allergy, idx) => (
-                              <span
-                                key={idx}
-                                className="bg-red-100 text-red-800 px-3 py-1 rounded-full text-sm font-medium"
-                              >
-                                {allergy}
-                              </span>
-                            ),
-                          )}
-                        </div>
-                      </div>
-
-                      <div className="bg-white border border-gray-200 rounded-lg p-4 mb-4">
-                        <h4 className="font-bold text-gray-900 mb-2">
-                          Medical Conditions
-                        </h4>
-                        <ul className="space-y-1">
-                          {verificationResult.patient.conditions.map(
-                            (condition, idx) => (
-                              <li
-                                key={idx}
-                                className="text-sm text-gray-700 flex items-start gap-2"
-                              >
-                                <span className="text-blue-600 mt-1">•</span>
-                                <span>{condition}</span>
-                              </li>
-                            ),
-                          )}
-                        </ul>
-                      </div>
-
-                      <div className="grid md:grid-cols-2 gap-4">
-                        <div className="bg-white rounded-lg p-4 border border-gray-200">
-                          <div className="text-xs text-gray-600 mb-1">
-                            Last Visit
-                          </div>
-                          <div className="text-sm font-semibold text-gray-900">
-                            {verificationResult.patient.lastVisit}
-                          </div>
-                        </div>
-                        <div className="bg-white rounded-lg p-4 border border-gray-200">
-                          <div className="text-xs text-gray-600 mb-1">
-                            Emergency Contact
-                          </div>
-                          <div className="text-sm font-semibold text-gray-900">
-                            {verificationResult.patient.emergencyContact}
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-
-                    <div className="bg-white rounded-lg p-4 border border-gray-200">
-                      <div className="text-xs text-gray-600 mb-2">
-                        Match Confidence
-                      </div>
-                      <div className="text-3xl font-bold text-gray-800 mb-3">
-                        {verificationResult.confidence.toFixed(1)}%
-                      </div>
-                      <div className="h-2.5 bg-gray-200 rounded-full overflow-hidden">
-                        <div
-                          className="h-full bg-emerald-500 transition-all"
-                          style={{ width: `${verificationResult.confidence}%` }}
-                        ></div>
-                      </div>
-                    </div>
-                  </div>
-                )}
-
-              {mode === "medical-record" &&
-                verificationResult.scenario === "no_medical_record" && (
-                  <div className="bg-gray-50 border-2 border-gray-300 rounded-lg p-6">
-                    <div className="flex items-center gap-3 mb-4">
-                      <div className="w-12 h-12 bg-gray-100 rounded-full flex items-center justify-center">
-                        <AlertCircle className="w-7 h-7 text-gray-600" />
-                      </div>
-                      <div>
-                        <h3 className="text-lg font-bold text-gray-900">
-                          No Patient Record Found
-                        </h3>
-                        <p className="text-sm text-gray-700">
-                          Face not registered in the system
-                        </p>
-                      </div>
-                    </div>
-
-                    <div className="bg-white border border-gray-200 rounded-lg p-4">
-                      <p className="text-sm text-gray-700 mb-3">
-                        No medical records found for this patient. This may be a
-                        first-time visitor or the face has not been registered
-                        yet.
-                      </p>
-                      <div className="text-xs text-gray-600">
-                        <strong>Action required:</strong> Proceed with standard
-                        patient registration process.
-                      </div>
-                    </div>
-                  </div>
-                )}
-
-              <div className="mt-6 flex flex-col sm:flex-row items-center justify-center gap-4">
+              <div className="space-y-4">
                 <button
-                  onClick={resetDemo}
-                  className="inline-flex items-center gap-2 bg-blue-600 text-white px-6 py-3 rounded-lg font-medium hover:bg-blue-700 transition shadow-sm"
+                  onClick={manuallyRestart}
+                  className="w-full bg-red-600 text-white px-6 py-4 rounded-lg hover:bg-red-700 transition font-bold flex items-center justify-center gap-3"
                 >
                   <RefreshCw className="w-5 h-5" />
-                  {mode === "appointment"
-                    ? "Check Another Patient"
-                    : "Lookup Another Patient"}
+                  TRY IDENTIFICATION AGAIN
                 </button>
-
-                <button
-                  onClick={resetDemo}
-                  className="inline-flex items-center gap-2 bg-gray-600 text-white px-6 py-3 rounded-lg font-medium hover:bg-gray-700 transition shadow-sm"
-                >
-                  Change Mode
+                <button className="w-full bg-gray-800 text-white px-6 py-4 rounded-lg hover:bg-gray-900 transition font-bold">
+                  PROCEED WITH MANUAL ENTRY
                 </button>
               </div>
             </div>
@@ -1417,52 +2078,67 @@ function FaceVerificationSystem() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50 py-6 px-4">
+    <div className="min-h-screen bg-gradient-to-br from-red-50 to-orange-50 py-6 px-4">
       <div className="max-w-7xl mx-auto">
-        <div className="mb-6">
-          <div className="flex items-center gap-3 mb-2">
-            {mode === "appointment" ? (
-              <Calendar className="w-7 h-7 text-blue-600" />
-            ) : (
-              <FileText className="w-7 h-7 text-emerald-600" />
-            )}
-            <div>
-              <h1 className="text-2xl font-semibold text-gray-800">
-                {mode === "appointment"
-                  ? "Appointment Check-In"
-                  : "Emergency Medical Lookup"}
-              </h1>
-              <p className="text-sm text-gray-600">
-                {mode === "appointment"
-                  ? "Automated patient arrival verification"
-                  : "Quick access to patient medical records"}
-              </p>
+        <div className="mb-8">
+          <div className="bg-gradient-to-r from-red-600 to-orange-600 text-white rounded-xl p-6 shadow-xl">
+            <div className="flex items-center gap-4 mb-4">
+              <div className="w-14 h-14 bg-white/20 rounded-full flex items-center justify-center backdrop-blur-sm">
+                <Zap className="w-8 h-8" />
+              </div>
+              <div>
+                <h1 className="text-3xl font-bold">
+                  EMERGENCY PATIENT IDENTIFICATION
+                </h1>
+                <p className="text-white/90">
+                  For unresponsive patients in emergency situations
+                </p>
+              </div>
+            </div>
+            <div className="flex flex-wrap gap-3">
+              <span className="bg-white/20 px-3 py-1 rounded-full text-sm">
+                ⚡ IMMEDIATE ACCESS
+              </span>
+              <span className="bg-white/20 px-3 py-1 rounded-full text-sm">
+                ⚠️ NO BLINK REQUIRED
+              </span>
+              <span className="bg-white/20 px-3 py-1 rounded-full text-sm">
+                🚨 EMERGENCY MODE
+              </span>
             </div>
           </div>
         </div>
 
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           <div className="lg:col-span-2">
-            <div className="bg-white rounded-lg shadow-md border border-gray-200 overflow-hidden">
-              <div className="bg-gray-50 border-b border-gray-200 px-4 py-3">
-                <div className="flex items-center gap-2">
-                  <Camera className="w-5 h-5 text-gray-600" />
-                  <h2 className="text-base font-semibold text-gray-800">
-                    Live Camera Capture
-                  </h2>
+            <div className="bg-white rounded-xl shadow-xl border border-gray-200 overflow-hidden">
+              <div className="bg-red-600 text-white px-6 py-4">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    <Camera className="w-6 h-6" />
+                    <h2 className="text-lg font-bold">
+                      EMERGENCY FACIAL IDENTIFICATION
+                    </h2>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <div
+                      className={`w-3 h-3 rounded-full ${cameraActive ? "bg-green-400 animate-pulse" : "bg-red-400"}`}
+                    ></div>
+                    <span className="text-sm font-medium">
+                      {cameraActive ? "LIVE" : "OFFLINE"}
+                    </span>
+                  </div>
                 </div>
               </div>
 
-              <div className="p-5">
+              <div className="p-6">
                 <StatusAlert message={status.message} type={status.type} />
 
                 <div
-                  className={`relative mb-5 ${
-                    cameraActive ? "block" : "hidden"
-                  }`}
+                  className={`relative ${cameraActive ? "block" : "hidden"}`}
                 >
-                  <div className="relative max-w-lg mx-auto">
-                    <div className="relative aspect-square rounded-full overflow-hidden bg-black shadow-lg border-4 border-gray-300">
+                  <div className="relative max-w-xl mx-auto">
+                    <div className="relative aspect-square rounded-2xl overflow-hidden bg-black shadow-2xl border-4 border-red-500">
                       <video
                         ref={videoRef}
                         autoPlay
@@ -1483,15 +2159,18 @@ function FaceVerificationSystem() {
                       />
 
                       {isCountingDown && countdown > 0 && (
-                        <div className="absolute inset-0 flex items-center justify-center z-10 bg-black/50">
-                          <div className="text-white text-7xl font-bold drop-shadow-lg">
+                        <div className="absolute inset-0 flex items-center justify-center z-10 bg-black/80">
+                          <div className="text-white text-8xl font-bold drop-shadow-2xl animate-pulse">
                             {countdown}
+                          </div>
+                          <div className="absolute bottom-10 text-white text-lg font-medium">
+                            EMERGENCY IDENTIFICATION
                           </div>
                         </div>
                       )}
 
-                      <div className="absolute bottom-4 left-1/2 transform -translate-x-1/2 z-20 max-w-xs w-full px-4">
-                        <div className="bg-black/75 text-white px-4 py-2.5 rounded-lg font-medium text-center shadow-lg text-sm">
+                      <div className="absolute bottom-8 left-1/2 transform -translate-x-1/2 z-20 w-full max-w-md px-4">
+                        <div className="bg-black/90 backdrop-blur-md text-white px-5 py-4 rounded-xl font-bold text-center shadow-2xl text-base border-2 border-white/30">
                           {feedback.message}
                         </div>
                       </div>
@@ -1499,17 +2178,16 @@ function FaceVerificationSystem() {
                   </div>
                 </div>
 
-                {!cameraActive && modelsLoaded && !verificationResult && (
-                  <div className="text-center p-10 bg-gray-50 border border-gray-200 rounded-lg">
-                    <div className="relative w-14 h-14 mx-auto mb-4">
-                      <div className="absolute inset-0 rounded-full border-4 border-gray-300"></div>
-                      <div className="absolute inset-0 rounded-full border-4 border-t-blue-600 animate-spin"></div>
+                {!cameraActive && (
+                  <div className="text-center p-12 bg-gradient-to-br from-gray-50 to-gray-100 border-2 border-dashed border-gray-400 rounded-2xl">
+                    <div className="w-24 h-24 mx-auto mb-6 text-gray-500">
+                      <Camera className="w-full h-full" />
                     </div>
-                    <p className="text-gray-700 font-medium text-sm">
-                      Initializing Camera
-                    </p>
-                    <p className="text-gray-500 text-xs mt-1">
-                      Please grant camera permissions
+                    <h3 className="text-xl font-bold text-gray-700 mb-3">
+                      EMERGENCY CAMERA INITIALIZING
+                    </h3>
+                    <p className="text-gray-500">
+                      Preparing immediate identification system...
                     </p>
                   </div>
                 )}
@@ -1517,132 +2195,206 @@ function FaceVerificationSystem() {
             </div>
           </div>
 
-          <div className="space-y-4">
-            {cameraActive && (
-              <div className="space-y-4">
-                <div className="bg-white rounded-lg shadow-md border border-gray-200 p-4">
-                  <div className="flex items-center gap-2 mb-3 pb-2 border-b border-gray-200">
-                    <div className="w-8 h-8 rounded-full bg-blue-100 flex items-center justify-center">
-                      <span className="text-base">👁️</span>
-                    </div>
-                    <h3 className="text-sm font-semibold text-gray-800">
-                      Blink Detection
-                    </h3>
-                  </div>
-                  <ul className="space-y-2 text-xs text-gray-700">
-                    <li className="flex items-start gap-2">
-                      <span className="text-blue-600 mt-0.5">•</span>
-                      <span>Blink naturally and slowly</span>
-                    </li>
-                    <li className="flex items-start gap-2">
-                      <span className="text-blue-600 mt-0.5">•</span>
-                      <span>
-                        Progress:{" "}
-                        <strong className="text-gray-900">
-                          {feedback.blinkCount}/2
-                        </strong>{" "}
-                        blinks
-                      </span>
-                    </li>
-                  </ul>
+          <div className="space-y-6">
+            <div className="bg-white rounded-xl shadow-xl border border-gray-200 p-6">
+              <div className="flex items-center gap-3 mb-6">
+                <div className="w-12 h-12 bg-red-100 rounded-full flex items-center justify-center">
+                  <AlertOctagon className="w-6 h-6 text-red-600" />
                 </div>
+                <h3 className="text-xl font-bold text-gray-900">
+                  EMERGENCY PROCEDURE
+                </h3>
+              </div>
 
-                <div className="bg-white rounded-lg shadow-md border border-gray-200 p-4">
-                  <div className="flex items-center gap-2 mb-3 pb-2 border-b border-gray-200">
-                    <Loader className="w-4 h-4 text-blue-600" />
-                    <h3 className="text-sm font-semibold text-gray-800">
-                      Status Indicators
-                    </h3>
-                  </div>
-                  <div className="grid grid-cols-2 gap-2">
-                    {[
-                      { label: "Face Detected", value: feedback.faceDetected },
-                      { label: "Lighting", value: feedback.lighting },
-                      { label: "Centered", value: feedback.centered },
-                      { label: "Distance", value: feedback.rightSize },
-                    ].map((metric, index) => (
-                      <div
-                        key={index}
-                        className={`p-3 rounded-lg text-center border ${
-                          metric.value
-                            ? "bg-emerald-50 border-emerald-300"
-                            : "bg-gray-50 border-gray-300"
-                        }`}
-                      >
-                        <div className="text-xs text-gray-600 mb-1">
-                          {metric.label}
+              <div className="space-y-4">
+                <div className="bg-gradient-to-r from-red-50 to-orange-50 border border-red-200 rounded-lg p-5">
+                  <ol className="space-y-4 text-gray-800">
+                    <li className="flex items-start gap-4">
+                      <div className="w-8 h-8 bg-red-600 text-white rounded-full flex items-center justify-center flex-shrink-0 font-bold">
+                        1
+                      </div>
+                      <div>
+                        <div className="font-bold text-red-900">
+                          POSITION PATIENT
                         </div>
-                        <div
-                          className={`text-sm font-bold ${
-                            metric.value ? "text-emerald-700" : "text-gray-400"
-                          }`}
-                        >
-                          {metric.value ? "✓" : "○"}
+                        <div className="text-sm mt-1">
+                          Position patient's face within the emergency frame
                         </div>
                       </div>
-                    ))}
-                  </div>
-                </div>
-
-                {isCountingDown && (
-                  <div className="bg-blue-50 border border-blue-300 rounded-lg p-3">
-                    <div className="flex items-center gap-2 text-blue-700 justify-center">
-                      <Loader className="w-4 h-4 animate-spin" />
-                      <span className="font-medium text-sm">
-                        Capturing in {countdown}s
-                      </span>
-                    </div>
-                  </div>
-                )}
-              </div>
-            )}
-
-            <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-              <div className="flex items-start gap-2">
-                <Info className="w-4 h-4 text-blue-600 mt-0.5 flex-shrink-0" />
-                <div>
-                  <h3 className="text-sm font-semibold text-blue-900 mb-2">
-                    Instructions
-                  </h3>
-                  <ol className="space-y-1.5 text-xs text-blue-800">
-                    <li>1. Position face within the circle</li>
-                    <li>2. Ensure proper lighting</li>
-                    <li>3. Complete 2 blinks</li>
-                    <li>4. Hold still during countdown</li>
-                    <li>
-                      5. System{" "}
-                      {mode === "appointment"
-                        ? "checks appointment"
-                        : "retrieves records"}{" "}
-                      automatically
+                    </li>
+                    <li className="flex items-start gap-4">
+                      <div className="w-8 h-8 bg-red-600 text-white rounded-full flex items-center justify-center flex-shrink-0 font-bold">
+                        2
+                      </div>
+                      <div>
+                        <div className="font-bold text-red-900">
+                          ENSURE VISIBILITY
+                        </div>
+                        <div className="text-sm mt-1">
+                          Adjust emergency lighting if needed
+                        </div>
+                      </div>
+                    </li>
+                    <li className="flex items-start gap-4">
+                      <div className="w-8 h-8 bg-red-600 text-white rounded-full flex items-center justify-center flex-shrink-0 font-bold">
+                        3
+                      </div>
+                      <div>
+                        <div className="font-bold text-red-900">
+                          HOLD POSITION
+                        </div>
+                        <div className="text-sm mt-1">
+                          Keep patient still for immediate identification
+                        </div>
+                      </div>
+                    </li>
+                    <li className="flex items-start gap-4">
+                      <div className="w-8 h-8 bg-red-600 text-white rounded-full flex items-center justify-center flex-shrink-0 font-bold">
+                        4
+                      </div>
+                      <div>
+                        <div className="font-bold text-red-900">
+                          IMMEDIATE ACCESS
+                        </div>
+                        <div className="text-sm mt-1">
+                          Medical records retrieved automatically
+                        </div>
+                      </div>
                     </li>
                   </ol>
                 </div>
               </div>
             </div>
+
+            <div className="bg-white rounded-xl shadow-xl border border-gray-200 p-6">
+              <h3 className="text-xl font-bold text-gray-900 mb-6">
+                EMERGENCY STATUS
+              </h3>
+
+              <div className="grid grid-cols-2 gap-4">
+                {[
+                  {
+                    label: "FACE DETECTED",
+                    value: feedback.faceDetected,
+                    icon: "👤",
+                    critical: true,
+                  },
+                  { label: "LIGHTING", value: feedback.lighting, icon: "💡" },
+                  {
+                    label: "POSITION",
+                    value: feedback.centered,
+                    icon: "🎯",
+                    critical: true,
+                  },
+                  { label: "DISTANCE", value: feedback.rightSize, icon: "📏" },
+                  {
+                    label: "SYSTEM READY",
+                    value: feedback.faceDetected && feedback.lighting,
+                    icon: "✅",
+                    critical: true,
+                  },
+                  { label: "COUNTDOWN", value: isCountingDown, icon: "⏱️" },
+                ].map((metric, index) => (
+                  <div
+                    key={index}
+                    className={`p-4 rounded-xl text-center transition-all border-2 ${
+                      metric.value
+                        ? metric.critical
+                          ? "bg-gradient-to-br from-green-50 to-emerald-50 border-emerald-400"
+                          : "bg-gradient-to-br from-blue-50 to-sky-50 border-blue-300"
+                        : metric.critical
+                          ? "bg-gradient-to-br from-red-50 to-orange-50 border-red-300"
+                          : "bg-gradient-to-br from-gray-50 to-gray-100 border-gray-300"
+                    }`}
+                  >
+                    <div className="text-2xl mb-2">{metric.icon}</div>
+                    <div className="text-xs font-bold text-gray-700 mb-1">
+                      {metric.label}
+                    </div>
+                    <div
+                      className={`text-sm font-bold ${
+                        metric.value
+                          ? metric.critical
+                            ? "text-emerald-700"
+                            : "text-blue-700"
+                          : metric.critical
+                            ? "text-red-700"
+                            : "text-gray-500"
+                      }`}
+                    >
+                      {metric.value
+                        ? metric.critical
+                          ? "✓ READY"
+                          : "✓ OK"
+                        : metric.critical
+                          ? "✗ NEEDED"
+                          : "✗ PENDING"}
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              {isCountingDown && (
+                <div className="mt-6 bg-gradient-to-r from-red-600 to-orange-600 text-white p-5 rounded-xl animate-pulse shadow-lg">
+                  <div className="flex items-center gap-4 justify-center">
+                    <Zap className="w-6 h-6" />
+                    <span className="text-xl font-bold">
+                      EMERGENCY IDENTIFICATION IN {countdown}S
+                    </span>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            <div className="bg-gradient-to-r from-red-600 to-orange-600 text-white rounded-xl shadow-xl p-6">
+              <h3 className="text-xl font-bold mb-4 flex items-center gap-3">
+                <AlertTriangle className="w-6 h-6" />
+                IMMEDIATE ACTIONS
+              </h3>
+              <div className="space-y-3">
+                <button
+                  onClick={manuallyRestart}
+                  className="w-full bg-white/20 text-white border-2 border-white/30 px-5 py-3 rounded-lg hover:bg-white/30 transition flex items-center justify-center gap-2"
+                >
+                  <RefreshCw className="w-5 h-5" />
+                  RESTART IDENTIFICATION
+                </button>
+              </div>
+            </div>
           </div>
         </div>
 
-        <div className="mt-5 flex justify-center">
-          <div className="inline-flex items-center gap-5 bg-white border border-gray-200 px-6 py-2.5 rounded-lg shadow-sm">
-            <div className="flex items-center gap-2">
-              <div
-                className={`w-2 h-2 rounded-full ${
-                  modelsLoaded ? "bg-emerald-500" : "bg-gray-400"
-                }`}
-              ></div>
-              <span className="text-xs font-medium text-gray-700">
-                AI System
-              </span>
-            </div>
-            <div className="w-px h-4 bg-gray-300"></div>
-            <div className="flex items-center gap-2">
-              <div
-                className={`w-2 h-2 rounded-full ${
-                  cameraActive ? "bg-emerald-500" : "bg-gray-400"
-                }`}
-              ></div>
-              <span className="text-xs font-medium text-gray-700">Camera</span>
+        <div className="mt-10">
+          <div className="bg-white/80 backdrop-blur-sm border border-gray-300 rounded-full px-8 py-4 shadow-lg">
+            <div className="flex flex-col md:flex-row items-center justify-between gap-4">
+              <div className="flex items-center gap-6">
+                <div className="flex items-center gap-2">
+                  <div className="w-3 h-3 rounded-full bg-emerald-500 animate-pulse"></div>
+                  <span className="font-bold text-gray-700">
+                    AI SYSTEM: ACTIVE
+                  </span>
+                </div>
+                <div className="hidden md:block text-gray-400">|</div>
+                <div className="flex items-center gap-2">
+                  <div
+                    className={`w-3 h-3 rounded-full ${cameraActive ? "bg-emerald-500 animate-pulse" : "bg-red-500"}`}
+                  ></div>
+                  <span className="font-bold text-gray-700">
+                    CAMERA: {cameraActive ? "LIVE" : "OFFLINE"}
+                  </span>
+                </div>
+                <div className="hidden md:block text-gray-400">|</div>
+                <div className="flex items-center gap-2">
+                  <div className="w-3 h-3 rounded-full bg-red-500 animate-pulse"></div>
+                  <span className="font-bold text-gray-700">
+                    EMERGENCY MODE: ACTIVE
+                  </span>
+                </div>
+              </div>
+              <div className="text-sm text-gray-600 italic">
+                ⚠️ FOR EMERGENCY USE ONLY • ⚡ NO BLINK REQUIRED • 🚨 IMMEDIATE
+                ACCESS
+              </div>
             </div>
           </div>
         </div>
@@ -1651,4 +2403,4 @@ function FaceVerificationSystem() {
   );
 }
 
-export default FaceVerificationSystem;
+export default EmergencyMedicalRecordsSystem;

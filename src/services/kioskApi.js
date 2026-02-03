@@ -24,6 +24,19 @@ class kioskService {
       throw error;
     }
   }
+
+  async getPatientMedicalRecords(livePhotoBase64) {
+    try {
+      const res = await this.kioskApi.post("/patient-medical-records", {
+        livePhotoBase64,
+      });
+
+      return res.data;
+    } catch (error) {
+      console.error(error);
+      throw error;
+    }
+  }
 }
 
 export default new kioskService();
