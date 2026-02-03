@@ -1,4 +1,4 @@
-import FaceVerificationSystem from "./components/capture/FaceCapture";
+import FaceVerificationSystem from "./services/FaceVerification";
 import KioskProvider from "./contexts/KisokContext";
 
 const App = () => {
